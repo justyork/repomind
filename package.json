@@ -11,7 +11,8 @@
     "templates"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:ui",
+    "build:ui": "vite build --config ui/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepublishOnly": "npm run build"
@@ -34,7 +35,10 @@
   },
   "devDependencies": {
     "@types/node": "^22.15.21",
+    "d3": "^7.9.0",
+    "marked": "^15.0.12",
     "typescript": "^5.8.3",
+    "vite": "^6.3.5",
     "vitest": "^3.2.1"
   }
 }

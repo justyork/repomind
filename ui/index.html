@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RepoMind</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="topbar">
+        <div class="brand">RepoMind</div>
+        <div id="stats" class="stats"></div>
+      </header>
+      <div class="layout">
+        <aside id="sidebar" class="sidebar"></aside>
+        <main id="graph" class="graph-panel"></main>
+        <aside id="doc-panel" class="doc-panel"></aside>
+      </div>
+      <div id="banner" class="banner hidden"></div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

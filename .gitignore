@@ -3,6 +3,7 @@ node_modules/
 
 # Build output
 dist/
+ui/dist/
 *.tsbuildinfo
 
 # gstack ephemeral state (project artifacts under .gstack/projects/ are tracked)

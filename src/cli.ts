@@ -3,6 +3,7 @@ import { runCheck } from './commands/check.js';
 import { runExport } from './commands/export.js';
 import { runInit } from './commands/init.js';
 import { runSetup } from './commands/setup.js';
+import { runUi } from './commands/ui.js';
 import { startMcpServer } from './mcp/server.js';
 
 function printHelp(): void {
@@ -14,6 +15,7 @@ Usage:
   repo-mind check [--cwd <dir>]
   repo-mind export [--force] [--cwd <dir>]
   repo-mind mcp
+  repo-mind ui [--port <n>] [--cwd <dir>]
 
 Commands:
   init    Scaffold .project-knowledge/ with example docs
@@ -21,6 +23,7 @@ Commands:
   check   Validate frontmatter schema and related links
   export  Write agents.md export to repo root
   mcp     Start the MCP stdio server
+  ui      Local read-only knowledge graph workspace (127.0.0.1)
 `);
 }
 
@@ -47,6 +50,11 @@ function parseArgs(argv: string[]): {
     }
     if (arg === '--cwd' && rest[i + 1]) {
       flags.cwd = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--port' && rest[i + 1]) {
+      flags.port = rest[i + 1];
       i += 1;
       continue;
     }
@@ -91,6 +99,12 @@ async function main(): Promise<void> {
     case 'mcp':
       await startMcpServer();
       break;
+    case 'ui': {
+      const portRaw = typeof flags.port === 'string' ? Number.parseInt(flags.port, 10) : undefined;
+      const port = portRaw && !Number.isNaN(portRaw) ? portRaw : undefined;
+      process.exit(await runUi({ cwd, port }));
+      break;
+    }
     default:
       console.error(`Unknown command: ${command}`);
       printHelp();
