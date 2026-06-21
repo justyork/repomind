@@ -16,7 +16,7 @@ export function renderDraftEditor(
   callbacks: EditorCallbacks,
   knownSlugs: string[] = [],
 ): void {
-  container.className = 'workspace-editor';
+  container.className = 'workspace-main workspace-editor';
   container.innerHTML = `
     <div class="workspace-toolbar">
       <div class="workspace-title-row">
@@ -149,7 +149,7 @@ export function renderDraftEditor(
         body: bodyEl.value,
       });
 
-      modal.classList.remove('hidden');
+      openPublishModal();
       const target = container.querySelector<HTMLElement>('#publish-target')!;
       const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
       target.textContent = `.project-knowledge/.../${slugEl.value}.md`;
@@ -170,8 +170,36 @@ export function renderDraftEditor(
   });
 
   container.querySelector<HTMLButtonElement>('#publish-cancel')?.addEventListener('click', () => {
-    modal.classList.add('hidden');
+    closePublishModal();
   });
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      closePublishModal();
+    }
+  });
+
+  let escapeHandler: ((event: KeyboardEvent) => void) | null = null;
+
+  function closePublishModal(): void {
+    modal.classList.add('hidden');
+    if (escapeHandler) {
+      document.removeEventListener('keydown', escapeHandler);
+      escapeHandler = null;
+    }
+  }
+
+  function openPublishModal(): void {
+    modal.classList.remove('hidden');
+    if (!escapeHandler) {
+      escapeHandler = (event: KeyboardEvent) => {
+        if (event.key === 'Escape') {
+          closePublishModal();
+        }
+      };
+      document.addEventListener('keydown', escapeHandler);
+    }
+  }
 
   container.querySelector<HTMLButtonElement>('#publish-confirm')?.addEventListener('click', () => {
     void (async () => {
@@ -188,7 +216,7 @@ export function renderDraftEditor(
         body: bodyEl.value,
       });
       const { result } = await publishDraftApi(draft.id);
-      modal.classList.add('hidden');
+      closePublishModal();
       callbacks.onPublished(result.path);
     })().catch((err: unknown) => {
       callbacks.onError(err instanceof Error ? err.message : 'Publish failed');

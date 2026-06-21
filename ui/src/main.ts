@@ -1,22 +1,23 @@
 import {
   createDraft,
   getDoc,
-  getGraph,
   getHealth,
   listDocs,
   listDrafts,
   searchDocs,
   type Draft,
   type ListDocsItem,
+  type SearchResult,
 } from './api.js';
+import { catalogLabel } from './catalog.js';
 import { renderDashboard } from './dashboard.js';
 import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
-import { createGraphView } from './graph.js';
 import { showNewDraftModal } from './new-draft-modal.js';
 import { renderSidebar } from './sidebar.js';
+import { bindThemeToggle, initTheme } from './theme.js';
 
-const ALL_GRAPH = '__all__';
+initTheme();
 
 function showToast(message: string, isError = false): void {
   const banner = document.querySelector<HTMLElement>('#banner');
@@ -29,6 +30,11 @@ function showToast(message: string, isError = false): void {
   setTimeout(() => banner.classList.add('hidden'), 5000);
 }
 
+function readSlugParam(): string | null {
+  const slug = new URLSearchParams(window.location.search).get('slug');
+  return slug?.trim() ? slug : null;
+}
+
 async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
   const { drafts } = await listDrafts();
   sidebarEl.refreshDrafts?.(drafts);
@@ -36,54 +42,23 @@ async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
 }
 
 async function main(): Promise<void> {
+  bindThemeToggle(document.querySelector<HTMLButtonElement>('#theme-toggle'));
+
   const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
   const workspaceEl = document.querySelector<HTMLElement>('#workspace')!;
-  const graphEl = document.querySelector<HTMLElement>('#graph')!;
-  const graphDrawer = document.querySelector<HTMLElement>('#graph-drawer')!;
-  const graphToggle = document.querySelector<HTMLButtonElement>('#graph-toggle')!;
   const healthToggle = document.querySelector<HTMLButtonElement>('#health-toggle')!;
   const statsEl = document.querySelector<HTMLElement>('#stats')!;
+  const searchInput = document.querySelector<HTMLInputElement>('#global-search')!;
+  const searchDropdown = document.querySelector<HTMLElement>('#search-dropdown')!;
 
-  const graph = createGraphView(graphEl);
-  let graphLoaded = false;
   let docs: ListDocsItem[] = [];
   let viewMode: 'workspace' | 'dashboard' = 'workspace';
   let dashboardRefresh: (() => Promise<void>) | null = null;
-
-  async function ensureGraph(): Promise<void> {
-    if (graphLoaded) {
-      graph.resize();
-      return;
-    }
-    const graphData = await getGraph(ALL_GRAPH);
-    graph.load(graphData);
-    graphLoaded = true;
-  }
-
-  async function revealGraphForSlug(slug: string): Promise<void> {
-    if (!graphDrawer.classList.contains('open')) {
-      graphDrawer.classList.add('open');
-      graphToggle.setAttribute('aria-expanded', 'true');
-      graphDrawer.setAttribute('aria-hidden', 'false');
-    }
-    await ensureGraph();
-    graph.selectSlug(slug);
-    graph.focusSlug(slug);
-  }
-
-  graphToggle.addEventListener('click', () => {
-    const open = graphDrawer.classList.toggle('open');
-    graphToggle.setAttribute('aria-expanded', String(open));
-    graphDrawer.setAttribute('aria-hidden', String(!open));
-    if (open) {
-      void ensureGraph().then(() => graph.resize());
-    }
-  });
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   function setViewMode(mode: 'workspace' | 'dashboard'): void {
     viewMode = mode;
     healthToggle.setAttribute('aria-pressed', String(mode === 'dashboard'));
-    graphToggle.disabled = mode === 'dashboard';
 
     if (mode === 'dashboard') {
       const dash = renderDashboard(workspaceEl, {
@@ -94,7 +69,6 @@ async function main(): Promise<void> {
         onPublished: (path) => {
           void (async () => {
             await reloadDrafts(sidebarEl);
-            graphLoaded = false;
             await refreshStats();
             showToast(`Published: ${path}`);
           })();
@@ -123,10 +97,61 @@ async function main(): Promise<void> {
     const { drafts } = await listDrafts();
     const broken =
       stats.brokenRelatedCount > 0 ? ` · ${stats.brokenRelatedCount} broken links` : '';
-    statsEl.textContent = `${health.docCount} docs · ${drafts.length} drafts${broken}`;
+    statsEl.textContent = `${health.docCount} pages · ${drafts.length} drafts${broken}`;
   }
 
   const knownSlugs = (): string[] => docs.map((d) => d.slug);
+
+  function renderSearchDropdown(results: SearchResult[]): void {
+    if (results.length === 0) {
+      searchDropdown.innerHTML = '<p class="search-empty">No matches</p>';
+      searchDropdown.classList.remove('hidden');
+      return;
+    }
+
+    const ul = document.createElement('ul');
+    ul.className = 'search-results';
+    for (const result of results) {
+      const doc = docs.find((d) => d.slug === result.slug);
+      const li = document.createElement('li');
+      li.innerHTML = `
+        <div class="search-result-title">${result.title}</div>
+        <div class="search-result-meta">${catalogLabel(doc?.type ?? '')} · ${result.snippet}</div>
+      `;
+      li.addEventListener('click', () => {
+        searchDropdown.classList.add('hidden');
+        searchInput.value = '';
+        void selectSlug(result.slug);
+      });
+      ul.appendChild(li);
+    }
+    searchDropdown.innerHTML = '';
+    searchDropdown.appendChild(ul);
+    searchDropdown.classList.remove('hidden');
+  }
+
+  searchInput.addEventListener('input', () => {
+    const q = searchInput.value.trim();
+    if (searchTimer) {
+      clearTimeout(searchTimer);
+    }
+    if (!q) {
+      searchDropdown.classList.add('hidden');
+      searchDropdown.innerHTML = '';
+      return;
+    }
+    searchTimer = setTimeout(() => {
+      void searchDocs(q)
+        .then(({ results }) => renderSearchDropdown(results))
+        .catch((err) => showToast(err instanceof Error ? err.message : 'Search failed', true));
+    }, 300);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!searchDropdown.contains(event.target as Node) && event.target !== searchInput) {
+      searchDropdown.classList.add('hidden');
+    }
+  });
 
   function openDraft(draft: Draft): void {
     setViewMode('workspace');
@@ -135,11 +160,10 @@ async function main(): Promise<void> {
       onPublished: (path) => {
         void (async () => {
           await reloadDrafts(sidebarEl);
-          graphLoaded = false;
           await refreshStats();
           void dashboardRefresh?.();
           showToast(`Published: ${path}`);
-          await selectSlug(draft.slug, { syncGraph: true });
+          await selectSlug(draft.slug);
         })();
       },
       onDeleted: () => {
@@ -152,19 +176,12 @@ async function main(): Promise<void> {
     }, knownSlugs());
   }
 
-  async function selectSlug(
-    slug: string,
-    options: { syncGraph?: boolean } = {},
-  ): Promise<void> {
+  async function selectSlug(slug: string): Promise<void> {
     if (viewMode === 'dashboard') {
       setViewMode('workspace');
     }
 
     sidebarEl.setActiveSlug?.(slug);
-    graph.selectSlug(slug);
-    if (options.syncGraph) {
-      await revealGraphForSlug(slug);
-    }
 
     try {
       const doc = await getDoc(slug);
@@ -178,6 +195,9 @@ async function main(): Promise<void> {
               showToast(err instanceof Error ? err.message : 'Fork failed', true);
             });
         },
+        onNavigateCatalog: (type) => {
+          sidebarEl.querySelector<HTMLButtonElement>(`[data-catalog="${type}"]`)?.click();
+        },
       });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load doc', true);
@@ -185,12 +205,8 @@ async function main(): Promise<void> {
   }
 
   workspaceEl.addEventListener('navigate-slug', ((event: CustomEvent<{ slug: string }>) => {
-    void selectSlug(event.detail.slug, { syncGraph: true });
+    void selectSlug(event.detail.slug);
   }) as EventListener);
-
-  graph.onSelect((slug) => {
-    void selectSlug(slug);
-  });
 
   try {
     await refreshStats();
@@ -201,12 +217,7 @@ async function main(): Promise<void> {
 
     renderSidebar(sidebarEl, docs, drafts, {
       onSelectSlug: (slug) => {
-        void selectSlug(slug, { syncGraph: true });
-      },
-      onSearch: (query) => {
-        void searchDocs(query)
-          .then(({ results }) => sidebarEl.showSearchResults?.(results))
-          .catch((err) => showToast(err instanceof Error ? err.message : 'Search failed', true));
+        void selectSlug(slug);
       },
       onSelectDraft: (draft) => openDraft(draft),
       onNewDraft: () => {
@@ -227,7 +238,10 @@ async function main(): Promise<void> {
 
     renderDocPanel(workspaceEl, null);
 
-    if (docs.length > 0 && docs[0]) {
+    const slugFromUrl = readSlugParam();
+    if (slugFromUrl && docs.some((d) => d.slug === slugFromUrl)) {
+      await selectSlug(slugFromUrl);
+    } else if (docs.length > 0 && docs[0]) {
       await selectSlug(docs[0].slug);
     }
   } catch (err) {

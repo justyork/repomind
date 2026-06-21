@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RepoMind — Graph</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="app" class="graph-page">
+      <header class="topbar">
+        <div class="topbar-left">
+          <a href="/" class="btn-ghost graph-back">← Workspace</a>
+          <div class="brand">Knowledge graph</div>
+        </div>
+        <div class="topbar-right">
+          <button type="button" id="theme-toggle" class="btn-ghost" data-theme-toggle aria-pressed="false">Dark mode</button>
+          <div id="stats" class="stats"></div>
+        </div>
+      </header>
+      <main id="graph" class="graph-fullscreen"></main>
+    </div>
+    <script type="module" src="/src/graph-page.ts"></script>
+  </body>
+</html>

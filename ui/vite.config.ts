@@ -9,5 +9,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main: path.resolve(uiRoot, 'index.html'),
+        graph: path.resolve(uiRoot, 'graph.html'),
+      },
+    },
   },
 });

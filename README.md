@@ -4,14 +4,14 @@ MCP-first project memory layer for AI-assisted development. Agents query structu
 
 ## Status
 
-**v0.1.0** — M1: CLI + MCP read tools. **UI-1:** read-only graph workspace (`repo-mind ui`).
+**v0.1.1** — M1 CLI + MCP. **Web UI:** Confluence-style workspace, drafts/publish, health dashboard, graph page, light/dark theme.
 
 | Artifact | Location |
 |----------|----------|
 | Full product vision | [`idea.md`](idea.md) |
 | Approved v1 design (Approach A) | [`.gstack/projects/repo-mind/york-repomind-design-20260621.md`](.gstack/projects/repo-mind/york-repomind-design-20260621.md) |
 | Executable spec (M1) | [`.gstack/projects/repo-mind/specs/2026-06-21-repomind-v1-core-scaffold.md`](.gstack/projects/repo-mind/specs/2026-06-21-repomind-v1-core-scaffold.md) |
-| Eng review test plan | [`.gstack/projects/repo-mind/york-repomind-eng-review-test-plan-20260621.md`](.gstack/projects/repo-mind/york-repomind-eng-review-test-plan-20260621.md) |
+| Design system | [`DESIGN.md`](DESIGN.md) |
 
 ## Quick start
 
@@ -37,21 +37,25 @@ Then ask your agent a project question — it should call `search_docs` / `get_d
 | `repo-mind check` | Validate frontmatter schema and `related:` links |
 | `repo-mind export` | Write `agents.md` to repo root |
 | `repo-mind mcp` | Start the MCP stdio server |
-| `repo-mind ui` | Local read-only knowledge graph (127.0.0.1:3847) |
+| `repo-mind ui` | Local knowledge workspace (127.0.0.1:3847) |
 
-## Web UI (UI-1)
+## Web UI
 
-Read-only graph workspace over `.project-knowledge/`:
+Confluence-style workspace over `.project-knowledge/`:
 
 ```bash
-npm run build          # compiles CLI + Vite UI (ui/dist)
-repo-mind ui           # http://127.0.0.1:3847
+npm run build
+repo-mind ui              # http://127.0.0.1:3847
 repo-mind ui --port 4000 --cwd /path/to/project
 ```
 
-Binds **127.0.0.1** only. Requires `npm run build` so `ui/dist` exists.
+- **Catalog tree** — docs grouped by type (ADR, specs, glossary…)
+- **Drafts + Publish** — SQLite drafts, publish to git markdown
+- **Health** — schema check, publish queue, export `agents.md`
+- **Graph** — full-page view at `/graph.html`
+- **Theme** — light (default) / dark toggle
 
-**UI-2 (drafts):** SQLite drafts in `.project-knowledge/.repo-mind/drafts.db` (gitignored). Use **New draft** or **Edit as draft**, then **Publish** to write markdown. MCP sees published files only.
+Binds **127.0.0.1** only. MCP reads published files only.
 
 
 - `list_docs` — filter by type, status, tag
@@ -82,11 +86,10 @@ This repo is developed with [gstack](https://github.com/garrytan/gstack). Projec
 
 ## Roadmap
 
-- **UI-2:** SQLite drafts + publish to markdown
-- **UI-3:** Check dashboard + diff preview
+- **UI-4b:** Editor in Confluence layout, type icons in tree
 - **M2:** A/B demo harness + E2E install-to-whoa
-- **M3:** `create_draft` (only if P2 kill-switch passes)
-- **v1.1:** GitHub Action, `llms.txt` / `docs-index.json` export
+- **M3:** `create_draft` MCP (if P2 kill-switch passes)
+- **v1.1:** `publish --pr`, GitHub Action, batch publish
 
 ## License
 

@@ -47,6 +47,55 @@ export function createGraphView(container: HTMLElement): GraphView {
   let selectCallback: ((slug: string) => void) | null = null;
   let selectedSlug: string | null = null;
   let loadedNodes: (GraphNode & d3.SimulationNodeDatum)[] = [];
+  let initialViewApplied = false;
+
+  function applyTransform(transform: d3.ZoomTransform, animate = true): void {
+    if (animate) {
+      svg.transition().duration(400).call(zoom.transform, transform);
+      return;
+    }
+    svg.call(zoom.transform, transform);
+  }
+
+  function fitToView(padding = 48): void {
+    if (loadedNodes.length === 0) {
+      return;
+    }
+
+    const xs = loadedNodes.map((n) => n.x ?? 0);
+    const ys = loadedNodes.map((n) => n.y ?? 0);
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+    const graphWidth = Math.max(maxX - minX, 1);
+    const graphHeight = Math.max(maxY - minY, 1);
+    const midX = (minX + maxX) / 2;
+    const midY = (minY + maxY) / 2;
+
+    const w = width();
+    const h = height();
+    const scale = Math.min(
+      2.5,
+      Math.max(
+        0.35,
+        Math.min((w - padding * 2) / graphWidth, (h - padding * 2) / graphHeight),
+      ),
+    );
+
+    applyTransform(
+      d3.zoomIdentity.translate(w / 2, h / 2).scale(scale).translate(-midX, -midY),
+      !initialViewApplied,
+    );
+    initialViewApplied = true;
+  }
+
+  function applyInitialView(): void {
+    if (initialViewApplied || loadedNodes.length === 0) {
+      return;
+    }
+    fitToView();
+  }
 
   function degreeMap(data: GraphData): Map<string, number> {
     const degrees = new Map<string, number>();
@@ -82,6 +131,8 @@ export function createGraphView(container: HTMLElement): GraphView {
       emptyEl.classList.add('hidden');
       svg.style('display', 'block');
       simulation?.stop();
+      initialViewApplied = false;
+      svg.call(zoom.transform, d3.zoomIdentity);
 
       const degrees = degreeMap(data);
       const nodes = data.nodes.map((n) => ({ ...n }));
@@ -171,6 +222,10 @@ export function createGraphView(container: HTMLElement): GraphView {
           (d) =>
             `translate(${(d as GraphNode & d3.SimulationNodeDatum).x ?? 0},${(d as GraphNode & d3.SimulationNodeDatum).y ?? 0})`,
         );
+
+        if (!initialViewApplied && simulation && simulation.alpha() < 0.05) {
+          applyInitialView();
+        }
       });
     },
 
@@ -194,13 +249,13 @@ export function createGraphView(container: HTMLElement): GraphView {
 
       const w = width();
       const h = height();
-      const scale = 1.4;
-      const transform = d3.zoomIdentity
-        .translate(w / 2, h / 2)
-        .scale(scale)
-        .translate(-target.x, -target.y);
-
-      svg.transition().duration(400).call(zoom.transform, transform);
+      applyTransform(
+        d3.zoomIdentity
+          .translate(w / 2, h / 2)
+          .scale(1.2)
+          .translate(-target.x, -target.y),
+        true,
+      );
     },
 
     onSelect(callback: (slug: string) => void): void {
@@ -209,6 +264,9 @@ export function createGraphView(container: HTMLElement): GraphView {
 
     resize(): void {
       resize();
+      if (initialViewApplied && loadedNodes.length > 0) {
+        fitToView();
+      }
     },
 
     destroy(): void {

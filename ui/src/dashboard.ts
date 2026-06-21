@@ -11,7 +11,7 @@ export function renderDashboard(
   container: HTMLElement,
   callbacks: DashboardCallbacks,
 ): { refresh: () => Promise<void> } {
-  container.className = 'workspace-dashboard';
+  container.className = 'workspace-main workspace-dashboard';
   container.innerHTML = `
     <div class="dashboard-header">
       <h1 class="doc-title">Health &amp; publish</h1>
