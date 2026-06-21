@@ -4,7 +4,7 @@
   "description": "MCP-first project memory layer for AI-assisted development",
   "type": "module",
   "bin": {
-    "repo-mind": "./dist/cli.js"
+    "repo-mind": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -28,6 +28,10 @@
     "knowledge-base"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/justyork/repomind.git"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.1",
     "better-sqlite3": "^12.11.1",

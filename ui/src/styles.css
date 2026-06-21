@@ -640,6 +640,52 @@ select {
   border-radius: 4px;
 }
 
+.catalog-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.catalog-icon--sm {
+  width: 16px;
+  height: 16px;
+  font-size: 0.6rem;
+}
+
+.catalog-icon--adr {
+  background: #c97b4a;
+}
+
+.catalog-icon--feature-spec {
+  background: #6abf69;
+}
+
+.catalog-icon--glossary-term {
+  background: #b07cc6;
+}
+
+.catalog-icon--open-question {
+  background: #e0c04a;
+  color: #172b4d;
+}
+
+.catalog-icon--agent-instruction {
+  background: #5b9fd4;
+}
+
+.catalog-icon--draft {
+  background: var(--muted);
+}
+
 .catalog-header:hover {
   background: var(--panel);
 }
@@ -674,6 +720,23 @@ select {
   border-radius: 4px;
   cursor: pointer;
   font-size: 0.875rem;
+}
+
+.editor-meta {
+  grid-template-columns: 1fr;
+  margin-top: 0.75rem;
+}
+
+.editor-meta .field-wide {
+  grid-column: span 1;
+}
+
+.editor-badges {
+  margin-bottom: 0.5rem;
+}
+
+.workspace-editor .split-editor {
+  min-height: 360px;
 }
 
 .page-item:hover {

@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import type { Draft } from './api.js';
 import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
+import { catalogLabel } from './catalog.js';
 
 export interface EditorCallbacks {
   onPublished: (path: string) => void;
@@ -17,54 +18,68 @@ export function renderDraftEditor(
   knownSlugs: string[] = [],
 ): void {
   container.className = 'workspace-main workspace-editor';
+  const catalog = catalogLabel(draft.type);
   container.innerHTML = `
-    <div class="workspace-toolbar">
-      <div class="workspace-title-row">
-        <input id="ed-title" class="title-input" type="text" placeholder="Document title" />
-        <div class="workspace-badges">
-          <span class="badge badge-draft">draft</span>
-          ${draft.forked_from ? `<span class="badge">fork: ${draft.forked_from}</span>` : ''}
+    <nav class="breadcrumb" aria-label="Breadcrumb">
+      <span class="crumb">Knowledge</span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb">Drafts</span>
+      <span class="crumb-sep">›</span>
+      <span class="crumb current">${escapeHtml(draft.title || draft.slug)}</span>
+    </nav>
+    <div class="page-layout">
+      <div class="page-content">
+        <header class="page-header">
+          <input id="ed-title" class="title-input doc-title" type="text" placeholder="Document title" />
+          <div class="workspace-actions">
+            <button type="button" id="ed-publish" class="btn-primary">Publish</button>
+            <button type="button" id="ed-discard" class="btn-ghost">Discard</button>
+          </div>
+        </header>
+        <div class="split-editor">
+          <div class="split-pane">
+            <div class="pane-label">Markdown</div>
+            <textarea id="ed-body" spellcheck="false"></textarea>
+          </div>
+          <div class="split-pane">
+            <div class="pane-label">Preview</div>
+            <div id="ed-preview" class="markdown-preview pane-preview"></div>
+          </div>
         </div>
       </div>
-      <div class="workspace-actions">
-        <button type="button" id="ed-publish" class="btn-primary">Publish</button>
-        <button type="button" id="ed-discard" class="btn-ghost">Discard</button>
-      </div>
-    </div>
-    <div class="meta-grid">
-      <div class="field"><label>Slug</label><input id="ed-slug" /></div>
-      <div class="field"><label>Type</label>
-        <select id="ed-type">
-          <option value="adr">adr</option>
-          <option value="feature-spec">feature-spec</option>
-          <option value="glossary-term">glossary-term</option>
-          <option value="open-question">open-question</option>
-          <option value="agent-instruction">agent-instruction</option>
-        </select>
-      </div>
-      <div class="field"><label>Status</label>
-        <select id="ed-status">
-          <option value="draft">draft</option>
-          <option value="proposed">proposed</option>
-          <option value="accepted">accepted</option>
-          <option value="superseded">superseded</option>
-        </select>
-      </div>
-      <div class="field"><label>Tags</label><input id="ed-tags" placeholder="comma-separated" /></div>
-      <div class="field field-wide"><label>Related</label><input id="ed-related" list="ed-related-suggestions" placeholder="slug-one, slug-two" /></div>
-    </div>
-    <datalist id="ed-related-suggestions">
-      ${knownSlugs.map((slug) => `<option value="${slug}"></option>`).join('')}
-    </datalist>
-    <div class="split-editor">
-      <div class="split-pane">
-        <div class="pane-label">Markdown</div>
-        <textarea id="ed-body" spellcheck="false"></textarea>
-      </div>
-      <div class="split-pane">
-        <div class="pane-label">Preview</div>
-        <div id="ed-preview" class="markdown-preview pane-preview"></div>
-      </div>
+      <aside class="page-info">
+        <h2 class="page-info-title">Page properties</h2>
+        <div class="workspace-badges editor-badges">
+          <span class="badge badge-draft">draft</span>
+          ${draft.forked_from ? `<span class="badge">fork: ${escapeHtml(draft.forked_from)}</span>` : ''}
+        </div>
+        <div class="meta-grid editor-meta">
+          <div class="field"><label>Slug</label><input id="ed-slug" /></div>
+          <div class="field"><label>Catalog</label><input id="ed-catalog" readonly value="${escapeHtml(catalog)}" /></div>
+          <div class="field"><label>Type</label>
+            <select id="ed-type">
+              <option value="adr">adr</option>
+              <option value="feature-spec">feature-spec</option>
+              <option value="glossary-term">glossary-term</option>
+              <option value="open-question">open-question</option>
+              <option value="agent-instruction">agent-instruction</option>
+            </select>
+          </div>
+          <div class="field"><label>Status</label>
+            <select id="ed-status">
+              <option value="draft">draft</option>
+              <option value="proposed">proposed</option>
+              <option value="accepted">accepted</option>
+              <option value="superseded">superseded</option>
+            </select>
+          </div>
+          <div class="field field-wide"><label>Tags</label><input id="ed-tags" placeholder="comma-separated" /></div>
+          <div class="field field-wide"><label>Related</label><input id="ed-related" list="ed-related-suggestions" placeholder="slug-one, slug-two" /></div>
+        </div>
+        <datalist id="ed-related-suggestions">
+          ${knownSlugs.map((slug) => `<option value="${slug}"></option>`).join('')}
+        </datalist>
+      </aside>
     </div>
     <div id="publish-modal" class="modal hidden">
       <div class="modal-card modal-card-wide">
@@ -126,6 +141,10 @@ export function renderDraftEditor(
 
   const onInput = () => {
     previewEl.innerHTML = marked.parse(bodyEl.value, { async: false }) as string;
+    const catalogEl = container.querySelector<HTMLInputElement>('#ed-catalog');
+    if (catalogEl) {
+      catalogEl.value = catalogLabel(typeEl.value);
+    }
     scheduleSave();
   };
 
@@ -233,4 +252,12 @@ export function renderDraftEditor(
         callbacks.onError(err instanceof Error ? err.message : 'Delete failed');
       });
   });
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

@@ -1,4 +1,4 @@
-import { CATALOG_ORDER, groupDocsByCatalog } from './catalog.js';
+import { CATALOG_ORDER, catalogIconLetter, catalogLabel, groupDocsByCatalog } from './catalog.js';
 import type { Draft, ListDocsItem } from './api.js';
 
 export interface SidebarCallbacks {
@@ -40,6 +40,7 @@ export function renderSidebar(
     <section class="catalog-section catalog-drafts">
       <button type="button" class="catalog-header" data-catalog="__drafts__" aria-expanded="true">
         <span class="catalog-chevron" aria-hidden="true">▾</span>
+        <span class="catalog-icon catalog-icon--draft" aria-hidden="true">✎</span>
         <span class="catalog-label">Drafts</span>
         <span class="catalog-count">${drafts.length}</span>
       </button>
@@ -65,6 +66,7 @@ export function renderSidebar(
       section.innerHTML = `
         <button type="button" class="catalog-header" data-catalog="${group.type}" aria-expanded="${isOpen}">
           <span class="catalog-chevron" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>
+          <span class="catalog-icon catalog-icon--${group.type}" aria-hidden="true">${catalogIconLetter(group.type)}</span>
           <span class="catalog-label">${group.label}</span>
           <span class="catalog-count">${group.docs.length}</span>
         </button>
@@ -84,6 +86,7 @@ export function renderSidebar(
             ? `<span class="status-chip status-${doc.status}">${doc.status}</span>`
             : '';
         li.innerHTML = `
+          <span class="catalog-icon catalog-icon--${doc.type} catalog-icon--sm" aria-hidden="true">${catalogIconLetter(doc.type)}</span>
           <span class="page-title">${doc.title}</span>
           ${statusChip}
         `;

@@ -16,6 +16,18 @@ export const CATALOG_LABELS: Record<string, string> = {
   'agent-instruction': 'Agent instructions',
 };
 
+export const CATALOG_ICON_LETTERS: Record<string, string> = {
+  adr: 'A',
+  'feature-spec': 'S',
+  'glossary-term': 'G',
+  'open-question': '?',
+  'agent-instruction': '◎',
+};
+
+export function catalogIconLetter(type: string): string {
+  return CATALOG_ICON_LETTERS[type] ?? type.slice(0, 1).toUpperCase();
+}
+
 export function catalogLabel(type: string): string {
   return CATALOG_LABELS[type] ?? type;
 }
