@@ -1,0 +1,24 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# gstack ephemeral state (project artifacts under .gstack/projects/ are tracked)
+.gstack/tmp/
+.gstack/sessions/
+.gstack/analytics/
+.gstack/slug-cache/
+
+# RepoMind runtime
+.project-knowledge/.worktrees/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.local

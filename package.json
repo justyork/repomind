@@ -1,0 +1,40 @@
+{
+  "name": "repo-mind",
+  "version": "0.1.0",
+  "description": "MCP-first project memory layer for AI-assisted development",
+  "type": "module",
+  "bin": {
+    "repo-mind": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "ai",
+    "documentation",
+    "knowledge-base"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "fast-glob": "^3.3.3",
+    "gray-matter": "^4.0.3",
+    "minimatch": "^10.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.1"
+  }
+}
