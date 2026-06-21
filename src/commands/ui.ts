@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
+import { openDraftsDb } from '../ui/db/drafts-db.js';
 import { resolveUiStaticDir, startUiServer } from '../ui/server.js';
 
 export interface UiCommandOptions {
@@ -27,19 +28,25 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
   }
 
   try {
+    const draftsDb = openDraftsDb(index.getKnowledgeRoot()!);
     const server = await startUiServer({
       host: '127.0.0.1',
       port,
       index,
       staticDir,
+      draftsDb,
     });
 
     const docCount = index.refresh().length;
-    console.log(`RepoMind UI at http://127.0.0.1:${port} (${docCount} docs)`);
+    const draftCount = draftsDb.listActive().length;
+    console.log(
+      `RepoMind UI at http://127.0.0.1:${port} (${docCount} docs, ${draftCount} drafts)`,
+    );
     console.log('Press Ctrl+C to stop');
 
     await new Promise<void>((resolve) => {
       const shutdown = () => {
+        draftsDb.close();
         server.close(() => resolve());
       };
       process.on('SIGINT', shutdown);

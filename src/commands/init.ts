@@ -29,6 +29,7 @@ Each document is Markdown with YAML frontmatter. Run \`npx repo-mind check\` to 
 `;
 
 const KNOWLEDGE_GITIGNORE = `.worktrees/
+.repo-mind/
 `;
 
 export interface InitOptions {

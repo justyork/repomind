@@ -4,12 +4,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DocIndex } from '../index/doc-index.js';
 import { routeApi } from './api-handlers.js';
+import type { DraftsDb } from './db/drafts-db.js';
+import { handleDraftApi } from './draft-api.js';
 
 export interface UiServerOptions {
   host?: string;
   port: number;
   index: DocIndex;
   staticDir: string;
+  draftsDb?: DraftsDb;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -22,6 +25,8 @@ const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
   '.woff2': 'font/woff2',
 };
+
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
 function resolveStaticPath(staticDir: string, requestPath: string): string | null {
   const normalized = path.normalize(requestPath).replace(/^(\.\.(\/|\\|$))+/, '');
@@ -41,6 +46,24 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown): void
     'Content-Length': Buffer.byteLength(payload),
   });
   res.end(payload);
+}
+
+function readBody(req: http.IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new Error('request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+    req.on('error', reject);
+  });
 }
 
 function serveStatic(
@@ -76,37 +99,76 @@ function serveStatic(
 
 export function createUiServer(options: UiServerOptions): http.Server {
   const host = options.host ?? '127.0.0.1';
-  const { staticDir, index } = options;
+  const { staticDir, index, draftsDb } = options;
 
   return http.createServer((req, res) => {
-    if (req.method !== 'GET' && req.method !== 'HEAD') {
-      sendJson(res, 405, { error: 'method not allowed' });
-      return;
-    }
+    void (async () => {
+      const method = req.method ?? 'GET';
+      const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
 
-    const apiResponse = routeApi(index, req);
-    if (apiResponse) {
-      if (req.method === 'HEAD') {
-        res.writeHead(apiResponse.status);
+      if (urlPath.startsWith('/api/')) {
+        let bodyRaw = '';
+        if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
+          try {
+            bodyRaw = await readBody(req);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'bad request';
+            sendJson(res, 400, { error: message });
+            return;
+          }
+        }
+
+        if (draftsDb) {
+          const draftResponse = handleDraftApi(index, draftsDb, method, urlPath, bodyRaw);
+          if (draftResponse) {
+            sendJson(res, draftResponse.status, draftResponse.body);
+            return;
+          }
+        } else if (urlPath.startsWith('/api/drafts')) {
+          sendJson(res, 503, { error: 'drafts database unavailable' });
+          return;
+        }
+
+        if (method !== 'GET' && method !== 'HEAD') {
+          sendJson(res, 405, { error: 'method not allowed' });
+          return;
+        }
+
+        const apiResponse = routeApi(index, req);
+        if (apiResponse) {
+          if (method === 'HEAD') {
+            res.writeHead(apiResponse.status);
+            res.end();
+            return;
+          }
+          sendJson(res, apiResponse.status, apiResponse.body);
+          return;
+        }
+
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
+
+      if (method !== 'GET' && method !== 'HEAD') {
+        sendJson(res, 405, { error: 'method not allowed' });
+        return;
+      }
+
+      if (method === 'HEAD') {
+        res.writeHead(200);
         res.end();
         return;
       }
-      sendJson(res, apiResponse.status, apiResponse.body);
-      return;
-    }
 
-    if (req.method === 'HEAD') {
-      res.writeHead(200);
-      res.end();
-      return;
-    }
-
-    const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
-    if (!serveStatic(res, staticDir, urlPath)) {
-      sendJson(res, 503, {
-        error: 'UI assets not found — run `npm run build:ui` in the repo-mind package',
-      });
-    }
+      if (!serveStatic(res, staticDir, urlPath)) {
+        sendJson(res, 503, {
+          error: 'UI assets not found — run `npm run build:ui` in the repo-mind package',
+        });
+      }
+    })().catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : 'internal error';
+      sendJson(res, 500, { error: message });
+    });
   });
 }
 

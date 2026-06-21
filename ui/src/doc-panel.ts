@@ -1,7 +1,15 @@
 import { marked } from 'marked';
 import type { DocDetail } from './api.js';
 
-export function renderDocPanel(container: HTMLElement, doc: DocDetail | null): void {
+export interface DocPanelOptions {
+  onFork?: (slug: string) => void;
+}
+
+export function renderDocPanel(
+  container: HTMLElement,
+  doc: DocDetail | null,
+  options: DocPanelOptions = {},
+): void {
   if (!doc || !doc.found) {
     container.innerHTML = '<p class="placeholder">Select a document</p>';
     return;
@@ -26,6 +34,7 @@ export function renderDocPanel(container: HTMLElement, doc: DocDetail | null): v
     <div class="path-row">
       <code id="doc-path">${doc.path ?? ''}</code>
       <button type="button" id="copy-path">Copy path</button>
+      <button type="button" id="fork-draft">Edit as draft</button>
     </div>
   `;
 
@@ -53,6 +62,12 @@ export function renderDocPanel(container: HTMLElement, doc: DocDetail | null): v
   container.querySelector<HTMLButtonElement>('#copy-path')?.addEventListener('click', () => {
     if (doc.path) {
       void navigator.clipboard.writeText(doc.path);
+    }
+  });
+
+  container.querySelector<HTMLButtonElement>('#fork-draft')?.addEventListener('click', () => {
+    if (doc.slug && options.onFork) {
+      options.onFork(doc.slug);
     }
   });
 }

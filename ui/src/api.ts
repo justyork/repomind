@@ -45,8 +45,8 @@ export interface HealthResponse {
   docCount: number;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url);
+async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
   if (!res.ok) {
     const err = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(err.error ?? `HTTP ${res.status}`);
@@ -78,4 +78,56 @@ export function getGraph(slug: string, depth?: number): Promise<GraphData> {
 
 export function getDoc(slug: string): Promise<DocDetail> {
   return fetchJson(`/api/docs/${encodeURIComponent(slug)}`);
+}
+
+export interface Draft {
+  id: string;
+  slug: string;
+  type: string;
+  status: string;
+  title: string;
+  body: string;
+  tags: string[];
+  related: string[];
+  forked_from: string | null;
+}
+
+export function listDrafts(): Promise<{ drafts: Draft[] }> {
+  return fetchJson('/api/drafts');
+}
+
+export function createDraft(payload: {
+  slug?: string;
+  type?: string;
+  title?: string;
+  body?: string;
+  forkFrom?: string;
+}): Promise<{ draft: Draft }> {
+  const body = payload.forkFrom
+    ? { forkFrom: payload.forkFrom }
+    : { slug: payload.slug, type: payload.type, title: payload.title, body: payload.body };
+  return fetchJson('/api/drafts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateDraftApi(
+  id: string,
+  payload: Partial<Pick<Draft, 'slug' | 'type' | 'status' | 'title' | 'body' | 'tags' | 'related'>>,
+): Promise<{ draft: Draft }> {
+  return fetchJson(`/api/drafts/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+}
+
+export function publishDraftApi(id: string): Promise<{ result: { path: string } }> {
+  return fetchJson(`/api/drafts/${encodeURIComponent(id)}/publish`, { method: 'POST' });
+}
+
+export function deleteDraftApi(id: string): Promise<{ deleted: boolean }> {
+  return fetchJson(`/api/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

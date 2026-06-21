@@ -51,6 +51,8 @@ repo-mind ui --port 4000 --cwd /path/to/project
 
 Binds **127.0.0.1** only. Requires `npm run build` so `ui/dist` exists.
 
+**UI-2 (drafts):** SQLite drafts in `.project-knowledge/.repo-mind/drafts.db` (gitignored). Use **New draft** or **Edit as draft**, then **Publish** to write markdown. MCP sees published files only.
+
 
 - `list_docs` — filter by type, status, tag
 - `search_docs` — ranked full-text search
