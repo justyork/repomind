@@ -5,6 +5,7 @@ import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DocIndex } from '../src/index/doc-index.ts';
 import { ALL_GRAPH_SLUG, exploreGraphAll } from '../src/ui/graph-all.ts';
+import { openDraftsDb } from '../src/ui/db/drafts-db.ts';
 import { computeKnowledgeStats } from '../src/ui/stats.ts';
 import { createUiServer } from '../src/ui/server.ts';
 
@@ -148,6 +149,62 @@ describe('UI HTTP API', () => {
       const graphBody = graph.body as { nodes: unknown[] };
       expect(graphBody.nodes.length).toBe(2);
     } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
+  it('serves check and draft diff endpoints', async () => {
+    const repo = makeTempDir();
+    fixtureKnowledge(repo);
+    writeDoc(
+      repo,
+      '.project-knowledge/adr/broken.md',
+      `---
+type: adr
+slug: broken
+status: draft
+title: Broken
+related:
+  - missing-slug
+---
+`,
+    );
+    const index = new DocIndex(repo);
+    const db = openDraftsDb(index.getKnowledgeRoot()!);
+    const draft = db.create({
+      slug: 'ui-draft',
+      type: 'glossary-term',
+      title: 'UI Draft',
+      body: 'Draft body',
+    });
+
+    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-mind-static-'));
+    const server = createUiServer({ port: 0, index, staticDir, host: '127.0.0.1', draftsDb: db });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('no port');
+    }
+    const port = addr.port;
+
+    try {
+      const check = await fetchJson(port, '/api/check');
+      expect(check.status).toBe(200);
+      const checkBody = check.body as { ok: boolean; violations: unknown[] };
+      expect(checkBody.ok).toBe(false);
+      expect(checkBody.violations.length).toBeGreaterThan(0);
+
+      const diff = await fetchJson(port, `/api/drafts/${encodeURIComponent(draft.id)}/diff`);
+      expect(diff.status).toBe(200);
+      const diffBody = diff.body as { isNew: boolean; diff: string };
+      expect(diffBody.isNew).toBe(true);
+      expect(diffBody.diff).toContain('Draft body');
+    } finally {
+      db.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(staticDir, { recursive: true, force: true });
     }

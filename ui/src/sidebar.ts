@@ -17,8 +17,6 @@ export function renderSidebar(
     <div class="sidebar-actions">
       <button type="button" id="new-draft" class="btn-primary btn-block">New draft</button>
     </div>
-    <h2>Drafts</h2>
-    <ul id="draft-list" class="doc-list"></ul>
     <h2>Search</h2>
     <div class="field">
       <input id="search-input" type="search" placeholder="Search docs…" />
@@ -39,6 +37,8 @@ export function renderSidebar(
     </div>
     <h2>Documents</h2>
     <ul id="doc-list" class="doc-list"></ul>
+    <h2>Drafts</h2>
+    <ul id="draft-list" class="doc-list"></ul>
   `;
 
   const types = [...new Set(docs.map((d) => d.type))].sort();

@@ -12,7 +12,9 @@ const TYPE_COLORS: Record<string, string> = {
 export interface GraphView {
   load(data: GraphData): void;
   selectSlug(slug: string | null): void;
+  focusSlug(slug: string): void;
   onSelect(callback: (slug: string) => void): void;
+  resize(): void;
   destroy(): void;
 }
 
@@ -44,6 +46,7 @@ export function createGraphView(container: HTMLElement): GraphView {
   let simulation: d3.Simulation<GraphNode & d3.SimulationNodeDatum, undefined> | null = null;
   let selectCallback: ((slug: string) => void) | null = null;
   let selectedSlug: string | null = null;
+  let loadedNodes: (GraphNode & d3.SimulationNodeDatum)[] = [];
 
   function degreeMap(data: GraphData): Map<string, number> {
     const degrees = new Map<string, number>();
@@ -82,6 +85,7 @@ export function createGraphView(container: HTMLElement): GraphView {
 
       const degrees = degreeMap(data);
       const nodes = data.nodes.map((n) => ({ ...n }));
+      loadedNodes = nodes;
       const links = data.edges.map((e) => ({ source: e.from, target: e.to }));
 
       simulation = d3
@@ -147,11 +151,13 @@ export function createGraphView(container: HTMLElement): GraphView {
         .attr('r', (d) => 8 + Math.min((degrees.get(d.slug) ?? 0) * 2, 16))
         .attr('fill', (d) => TYPE_COLORS[d.type] ?? '#888');
 
+      node.append('title').text((d) => `${d.slug}\n${d.title}`);
+
       node
         .append('text')
         .attr('dy', 4)
         .attr('text-anchor', 'middle')
-        .text((d) => (d.title.length > 14 ? `${d.title.slice(0, 12)}…` : d.title));
+        .text((d) => d.slug);
 
       simulation.on('tick', () => {
         link
@@ -175,8 +181,34 @@ export function createGraphView(container: HTMLElement): GraphView {
       );
     },
 
+    focusSlug(slug: string): void {
+      selectedSlug = slug;
+      nodeLayer.selectAll<SVGGElement, GraphNode>('g.node').attr('class', (d) =>
+        d.slug === selectedSlug ? 'node selected' : 'node',
+      );
+
+      const target = loadedNodes.find((n) => n.slug === slug);
+      if (!target || target.x === undefined || target.y === undefined) {
+        return;
+      }
+
+      const w = width();
+      const h = height();
+      const scale = 1.4;
+      const transform = d3.zoomIdentity
+        .translate(w / 2, h / 2)
+        .scale(scale)
+        .translate(-target.x, -target.y);
+
+      svg.transition().duration(400).call(zoom.transform, transform);
+    },
+
     onSelect(callback: (slug: string) => void): void {
       selectCallback = callback;
+    },
+
+    resize(): void {
+      resize();
     },
 
     destroy(): void {

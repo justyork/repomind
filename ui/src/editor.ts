@@ -1,6 +1,6 @@
 import { marked } from 'marked';
 import type { Draft } from './api.js';
-import { deleteDraftApi, publishDraftApi, updateDraftApi } from './api.js';
+import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
 
 export interface EditorCallbacks {
   onPublished: (path: string) => void;
@@ -14,46 +14,66 @@ export function renderDraftEditor(
   container: HTMLElement,
   draft: Draft,
   callbacks: EditorCallbacks,
+  knownSlugs: string[] = [],
 ): void {
+  container.className = 'workspace-editor';
   container.innerHTML = `
-    <div class="editor-header">
-      <span class="badge">draft</span>
-      ${draft.forked_from ? `<span class="badge">fork of ${draft.forked_from}</span>` : ''}
+    <div class="workspace-toolbar">
+      <div class="workspace-title-row">
+        <input id="ed-title" class="title-input" type="text" placeholder="Document title" />
+        <div class="workspace-badges">
+          <span class="badge badge-draft">draft</span>
+          ${draft.forked_from ? `<span class="badge">fork: ${draft.forked_from}</span>` : ''}
+        </div>
+      </div>
+      <div class="workspace-actions">
+        <button type="button" id="ed-publish" class="btn-primary">Publish</button>
+        <button type="button" id="ed-discard" class="btn-ghost">Discard</button>
+      </div>
     </div>
-    <div class="field"><label>Title</label><input id="ed-title" value="" /></div>
-    <div class="field"><label>Slug</label><input id="ed-slug" value="" /></div>
-    <div class="field"><label>Type</label>
-      <select id="ed-type">
-        <option value="adr">adr</option>
-        <option value="feature-spec">feature-spec</option>
-        <option value="glossary-term">glossary-term</option>
-        <option value="open-question">open-question</option>
-        <option value="agent-instruction">agent-instruction</option>
-      </select>
+    <div class="meta-grid">
+      <div class="field"><label>Slug</label><input id="ed-slug" /></div>
+      <div class="field"><label>Type</label>
+        <select id="ed-type">
+          <option value="adr">adr</option>
+          <option value="feature-spec">feature-spec</option>
+          <option value="glossary-term">glossary-term</option>
+          <option value="open-question">open-question</option>
+          <option value="agent-instruction">agent-instruction</option>
+        </select>
+      </div>
+      <div class="field"><label>Status</label>
+        <select id="ed-status">
+          <option value="draft">draft</option>
+          <option value="proposed">proposed</option>
+          <option value="accepted">accepted</option>
+          <option value="superseded">superseded</option>
+        </select>
+      </div>
+      <div class="field"><label>Tags</label><input id="ed-tags" placeholder="comma-separated" /></div>
+      <div class="field field-wide"><label>Related</label><input id="ed-related" list="ed-related-suggestions" placeholder="slug-one, slug-two" /></div>
     </div>
-    <div class="field"><label>Status</label>
-      <select id="ed-status">
-        <option value="draft">draft</option>
-        <option value="proposed">proposed</option>
-        <option value="accepted">accepted</option>
-        <option value="superseded">superseded</option>
-      </select>
-    </div>
-    <div class="field"><label>Tags (comma-separated)</label><input id="ed-tags" /></div>
-    <div class="field"><label>Related slugs (comma-separated)</label><input id="ed-related" /></div>
-    <div class="field"><label>Body (markdown)</label><textarea id="ed-body" rows="10"></textarea></div>
-    <div id="ed-preview" class="markdown-preview editor-preview"></div>
-    <div class="editor-actions">
-      <button type="button" id="ed-publish" class="btn-primary">Publish</button>
-      <button type="button" id="ed-discard">Discard draft</button>
+    <datalist id="ed-related-suggestions">
+      ${knownSlugs.map((slug) => `<option value="${slug}"></option>`).join('')}
+    </datalist>
+    <div class="split-editor">
+      <div class="split-pane">
+        <div class="pane-label">Markdown</div>
+        <textarea id="ed-body" spellcheck="false"></textarea>
+      </div>
+      <div class="split-pane">
+        <div class="pane-label">Preview</div>
+        <div id="ed-preview" class="markdown-preview pane-preview"></div>
+      </div>
     </div>
     <div id="publish-modal" class="modal hidden">
-      <div class="modal-card">
+      <div class="modal-card modal-card-wide">
         <p>Publish to git as markdown?</p>
         <code id="publish-target"></code>
+        <pre id="publish-diff" class="diff-preview"></pre>
         <div class="editor-actions">
           <button type="button" id="publish-confirm" class="btn-primary">Confirm</button>
-          <button type="button" id="publish-cancel">Cancel</button>
+          <button type="button" id="publish-cancel" class="btn-ghost">Cancel</button>
         </div>
       </div>
     </div>
@@ -115,9 +135,38 @@ export function renderDraftEditor(
   }
 
   container.querySelector<HTMLButtonElement>('#ed-publish')?.addEventListener('click', () => {
-    modal.classList.remove('hidden');
-    const target = container.querySelector<HTMLSpanElement>('#publish-target')!;
-    target.textContent = `.project-knowledge/.../${slugEl.value}.md`;
+    void (async () => {
+      if (saveTimer) {
+        clearTimeout(saveTimer);
+      }
+      await updateDraftApi(draft.id, {
+        title: titleEl.value,
+        slug: slugEl.value,
+        type: typeEl.value,
+        status: statusEl.value,
+        tags: parseList(tagsEl.value),
+        related: parseList(relatedEl.value),
+        body: bodyEl.value,
+      });
+
+      modal.classList.remove('hidden');
+      const target = container.querySelector<HTMLElement>('#publish-target')!;
+      const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
+      target.textContent = `.project-knowledge/.../${slugEl.value}.md`;
+      diffEl.textContent = 'Loading diff…';
+
+      try {
+        const diffResult = await getDraftDiff(draft.id);
+        if (diffResult.targetPath) {
+          target.textContent = diffResult.targetPath;
+        }
+        diffEl.textContent = diffResult.diff;
+      } catch (err) {
+        diffEl.textContent = err instanceof Error ? err.message : 'Diff unavailable';
+      }
+    })().catch((err: unknown) => {
+      callbacks.onError(err instanceof Error ? err.message : 'Failed to prepare publish');
+    });
   });
 
   container.querySelector<HTMLButtonElement>('#publish-cancel')?.addEventListener('click', () => {

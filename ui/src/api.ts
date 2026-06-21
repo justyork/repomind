@@ -131,3 +131,32 @@ export function publishDraftApi(id: string): Promise<{ result: { path: string } 
 export function deleteDraftApi(id: string): Promise<{ deleted: boolean }> {
   return fetchJson(`/api/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+export interface CheckViolation {
+  path: string;
+  message: string;
+}
+
+export interface CheckReport {
+  ok: boolean;
+  violations: CheckViolation[];
+  warnings: string[];
+}
+
+export function getCheckReport(): Promise<CheckReport> {
+  return fetchJson('/api/check');
+}
+
+export interface DraftDiffResult {
+  targetPath: string | null;
+  isNew: boolean;
+  diff: string;
+}
+
+export function getDraftDiff(id: string): Promise<DraftDiffResult> {
+  return fetchJson(`/api/drafts/${encodeURIComponent(id)}/diff`);
+}
+
+export function exportAgentsMd(): Promise<{ ok: boolean; path: string }> {
+  return fetchJson('/api/export', { method: 'POST' });
+}

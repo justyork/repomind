@@ -9,13 +9,25 @@
   <body>
     <div id="app">
       <header class="topbar">
-        <div class="brand">RepoMind</div>
+        <div class="topbar-left">
+          <div class="brand">RepoMind</div>
+          <button type="button" id="graph-toggle" class="btn-ghost" aria-expanded="false">
+            Graph
+          </button>
+          <button type="button" id="health-toggle" class="btn-ghost" aria-pressed="false">
+            Health
+          </button>
+        </div>
         <div id="stats" class="stats"></div>
       </header>
       <div class="layout">
         <aside id="sidebar" class="sidebar"></aside>
-        <main id="graph" class="graph-panel"></main>
-        <aside id="doc-panel" class="doc-panel"></aside>
+        <div class="workspace">
+          <main id="workspace" class="workspace-main"></main>
+          <section id="graph-drawer" class="graph-drawer" aria-hidden="true">
+            <div id="graph" class="graph-panel"></div>
+          </section>
+        </div>
       </div>
       <div id="banner" class="banner hidden"></div>
     </div>

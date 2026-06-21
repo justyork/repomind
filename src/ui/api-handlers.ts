@@ -1,5 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import { URL } from 'node:url';
+import { collectCheckReport } from '../check/collect-violations.js';
 import type { DocIndex } from '../index/doc-index.js';
 import { isValidSlug } from '../index/slug.js';
 import { isDocStatus, isDocType } from '../index/types.js';
@@ -90,6 +91,14 @@ export function handleApiRequest(
 
   if (pathname === '/api/stats') {
     return { status: 200, body: computeKnowledgeStats(index) };
+  }
+
+  if (pathname === '/api/check') {
+    const report = collectCheckReport(index);
+    if (!report) {
+      return jsonError(404, 'no .project-knowledge/ found');
+    }
+    return { status: 200, body: report };
   }
 
   const graphMatch = pathname.match(/^\/api\/graph\/([^/]+)$/);

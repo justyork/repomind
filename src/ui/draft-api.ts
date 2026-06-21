@@ -1,9 +1,11 @@
 import type { IncomingMessage } from 'node:http';
 import type { DocIndex } from '../index/doc-index.js';
+import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
+import { computeDraftDiff } from './diff.js';
 import { publishDraft } from './publish.js';
 
 export interface DraftApiResponse {
@@ -44,12 +46,30 @@ export function handleDraftApi(
   pathname: string,
   bodyRaw: string,
 ): DraftApiResponse | null {
+  if (pathname === '/api/export' && method === 'POST') {
+    const code = runExport({ force: true });
+    if (code !== 0) {
+      return jsonError(500, 'export failed');
+    }
+    return { status: 200, body: { ok: true, path: 'agents.md' } };
+  }
+
   if (!pathname.startsWith('/api/drafts')) {
     return null;
   }
 
   if (pathname === '/api/drafts' && method === 'GET') {
     return { status: 200, body: { drafts: db.listActive() } };
+  }
+
+  const diffMatch = pathname.match(/^\/api\/drafts\/([^/]+)\/diff$/);
+  if (diffMatch && method === 'GET') {
+    const id = decodeURIComponent(diffMatch[1] ?? '');
+    const draft = db.getById(id);
+    if (!draft) {
+      return jsonError(404, 'draft not found');
+    }
+    return { status: 200, body: computeDraftDiff(index, draft) };
   }
 
   if (pathname === '/api/drafts' && method === 'POST') {
