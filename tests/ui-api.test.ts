@@ -51,7 +51,7 @@ title: Convoy Rules
 related:
   - caravan
 ---
-Rules for convoy movement.
+Rules for convoy movement. See [[caravan]] for glossary.
 `,
   );
 }
@@ -148,6 +148,14 @@ describe('UI HTTP API', () => {
       expect(graph.status).toBe(200);
       const graphBody = graph.body as { nodes: unknown[] };
       expect(graphBody.nodes.length).toBe(2);
+
+      const backlinks = await fetchJson(port, '/api/backlinks/caravan');
+      expect(backlinks.status).toBe(200);
+      const backlinksBody = backlinks.body as { backlinks: { slug: string; kind: string }[] };
+      expect(backlinksBody.backlinks.some((b) => b.slug === 'convoy-rules')).toBe(true);
+
+      const linkHealth = await fetchJson(port, '/api/link-health');
+      expect(linkHealth.status).toBe(200);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(staticDir, { recursive: true, force: true });

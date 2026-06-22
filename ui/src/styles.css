@@ -1083,6 +1083,55 @@ select {
   align-items: start;
 }
 
+.page-layout--focus {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.page-layout--focus .page-info {
+  display: none;
+}
+
+.reader-backlinks {
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.reader-backlinks.hidden {
+  display: none;
+}
+
+.reader-backlinks-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 0 0 0.75rem;
+}
+
+.reader-backlinks-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.backlink-kind {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  margin-left: 0.25rem;
+}
+
+.markdown-preview a.wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--accent);
+}
+
+.markdown-preview a.wikilink:hover {
+  text-decoration: underline;
+}
+
 .page-content {
   min-width: 0;
 }

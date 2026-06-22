@@ -2,10 +2,14 @@ import type { IncomingMessage } from 'node:http';
 import { URL } from 'node:url';
 import { collectCheckReport } from '../check/collect-violations.js';
 import type { DocIndex } from '../index/doc-index.js';
+import {
+  computeLinkHealth,
+  getBacklinksForSlug,
+} from '../index/link-index.js';
 import { isValidSlug } from '../index/slug.js';
 import { isDocStatus, isDocType } from '../index/types.js';
 import { listUnpreparedFiles, prepareDocFile } from '../prepare/prepare-docs.js';
-import { exploreGraph } from '../tools/explore-graph.js';
+import { buildLinkIndexForDocs, exploreGraph } from '../tools/explore-graph.js';
 import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
@@ -110,6 +114,43 @@ export function handleApiRequest(
       return jsonError(404, 'no docs/ directory found');
     }
     return { status: 200, body: { tree, catalogMeta: readCatalogMeta(index.getKnowledgeRoot()!) } };
+  }
+
+  if (pathname === '/api/link-health') {
+    const docs = index.refresh();
+    const snapshot = buildLinkIndexForDocs(index);
+    const health = computeLinkHealth(snapshot, docs);
+    return {
+      status: 200,
+      body: {
+        orphanCount: health.orphanSlugs.length,
+        orphanSlugs: health.orphanSlugs,
+        brokenCount: health.brokenTargets.length,
+        brokenTargets: health.brokenTargets,
+        oneWayCount: health.oneWayCount,
+      },
+    };
+  }
+
+  const backlinksMatch = pathname.match(/^\/api\/backlinks\/([^/]+)$/);
+  if (backlinksMatch) {
+    const slug = decodeURIComponent(backlinksMatch[1] ?? '');
+    if (!isValidSlug(slug)) {
+      return jsonError(400, `invalid slug: ${slug}`);
+    }
+    const docs = index.refresh();
+    const docsBySlug = new Map(docs.map((doc) => [doc.slug, doc]));
+    if (!docsBySlug.has(slug)) {
+      return jsonError(404, `unknown slug: ${slug}`);
+    }
+    const snapshot = buildLinkIndexForDocs(index);
+    return {
+      status: 200,
+      body: {
+        slug,
+        backlinks: getBacklinksForSlug(snapshot, slug, docsBySlug),
+      },
+    };
   }
 
   if (pathname === '/api/unprepared') {

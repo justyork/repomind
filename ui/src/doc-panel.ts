@@ -1,9 +1,28 @@
 import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
+import { getBacklinks } from './api.js';
 import { catalogLabel } from './catalog.js';
 import type { DocDetail } from './api.js';
 
 export interface DocPanelOptions {
   onEdit?: (slug: string) => void;
+}
+
+const FOCUS_STORAGE_KEY = 'repomind-page-info-hidden';
+
+function loadFocusMode(): boolean {
+  try {
+    return localStorage.getItem(FOCUS_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+function saveFocusMode(hidden: boolean): void {
+  try {
+    localStorage.setItem(FOCUS_STORAGE_KEY, hidden ? 'true' : 'false');
+  } catch {
+    // ignore
+  }
 }
 
 export function renderDocPanel(
@@ -34,6 +53,7 @@ export function renderDocPanel(
     ? fm.related.filter((r): r is string => typeof r === 'string')
     : [];
   const catalog = catalogLabel(type);
+  const focusMode = loadFocusMode();
 
   container.innerHTML = `
     <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -43,16 +63,20 @@ export function renderDocPanel(
       <span class="crumb-sep">›</span>
       <span class="crumb current">${escapeHtml(title)}</span>
     </nav>
-    <div class="page-layout">
+    <div class="page-layout${focusMode ? ' page-layout--focus' : ''}">
       <article class="page-content">
         <header class="page-header">
           <h1 class="doc-title">${escapeHtml(title)}</h1>
           <div class="workspace-actions">
+            <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
+              ${focusMode ? 'Show info' : 'Focus'}
+            </button>
             <button type="button" id="edit-page" class="btn-primary">Edit</button>
             <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
           </div>
         </header>
         <div id="tab-preview" class="markdown-preview reader-preview"></div>
+        <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
       </article>
       <aside class="page-info">
         <h2 class="page-info-title">Page info</h2>
@@ -87,6 +111,16 @@ export function renderDocPanel(
   previewEl.innerHTML = renderMarkdown(doc.body ?? '');
   void enhanceMarkdownPreview(previewEl);
 
+  previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
+    link.addEventListener('click', (event) => {
+      event.preventDefault();
+      const slug = link.dataset.slug;
+      if (slug) {
+        container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
+      }
+    });
+  });
+
   const fmEl = container.querySelector<HTMLDivElement>('#tab-frontmatter')!;
   fmEl.innerHTML = `<pre class="frontmatter-yaml"></pre>`;
   fmEl.querySelector('pre')!.textContent = JSON.stringify(fm, null, 2);
@@ -103,6 +137,18 @@ export function renderDocPanel(
       btn.classList.add('active');
       container.querySelector(`#tab-${tab}`)?.classList.add('active');
     });
+  });
+
+  container.querySelector<HTMLButtonElement>('#toggle-focus')?.addEventListener('click', () => {
+    const layout = container.querySelector('.page-layout');
+    const btn = container.querySelector<HTMLButtonElement>('#toggle-focus');
+    const next = !layout?.classList.contains('page-layout--focus');
+    layout?.classList.toggle('page-layout--focus', next);
+    saveFocusMode(next);
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(next));
+      btn.textContent = next ? 'Show info' : 'Focus';
+    }
   });
 
   container.querySelector<HTMLButtonElement>('#copy-path')?.addEventListener('click', () => {
@@ -125,6 +171,39 @@ export function renderDocPanel(
       }
     });
   });
+
+  if (doc.slug) {
+    void getBacklinks(doc.slug)
+      .then(({ backlinks }) => {
+        const section = container.querySelector<HTMLElement>('#reader-backlinks');
+        if (!section || backlinks.length === 0) {
+          return;
+        }
+        section.classList.remove('hidden');
+        section.innerHTML = `
+          <h2 class="reader-backlinks-title">Backlinks</h2>
+          <div class="reader-backlinks-list">
+            ${backlinks
+              .map(
+                (item) =>
+                  `<button type="button" class="related-chip" data-slug="${escapeHtml(item.slug)}">${escapeHtml(item.title)} <span class="backlink-kind">${escapeHtml(item.kind)}</span></button>`,
+              )
+              .join('')}
+          </div>
+        `;
+        section.querySelectorAll<HTMLButtonElement>('.related-chip').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            const slug = chip.dataset.slug;
+            if (slug) {
+              container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // backlinks are optional enrichment
+      });
+  }
 }
 
 function escapeHtml(text: string): string {

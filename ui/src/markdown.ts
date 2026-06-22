@@ -10,6 +10,17 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
+const WIKILINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
+
+export function preprocessWikilinks(markdown: string): string {
+  return markdown.replace(WIKILINK_PATTERN, (_, display, slugPart) => {
+    const slug = (slugPart ?? display).trim();
+    const label = display.trim();
+    const encoded = encodeURIComponent(slug);
+    return `[${label}](#wikilink:${encoded})`;
+  });
+}
+
 function configureMarked(): void {
   if (configured) {
     return;
@@ -52,6 +63,13 @@ function configureMarked(): void {
         const content = this.parser.parse(item.tokens, !!item.loose).trim();
         return `<li class="task-list-item"><label class="task-list-item-label">${checkbox}<span class="task-list-item-content">${content}</span></label></li>\n`;
       },
+      link({ href, text }) {
+        if (href?.startsWith('#wikilink:')) {
+          const slug = decodeURIComponent(href.slice('#wikilink:'.length));
+          return `<a href="#" class="wikilink" data-slug="${escapeHtml(slug)}">${text}</a>`;
+        }
+        return false;
+      },
     },
   });
 
@@ -60,7 +78,7 @@ function configureMarked(): void {
 
 export function renderMarkdown(markdown: string): string {
   configureMarked();
-  return marked.parse(markdown, { async: false }) as string;
+  return marked.parse(preprocessWikilinks(markdown), { async: false }) as string;
 }
 
 let mermaidTheme: string | null = null;

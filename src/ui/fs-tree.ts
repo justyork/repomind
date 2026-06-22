@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
+import type { LinkEdge } from '../index/link-index.js';
 import { catalogEmoji, readCatalogMeta } from './catalog-meta.js';
 import { joinRelativePath, normalizeRelativePath } from './safe-path.js';
 
@@ -155,4 +156,33 @@ export function findTreePageSlug(
     }
   }
   return null;
+}
+
+export function collectParentOfEdges(tree: TreeFolderNode | null): LinkEdge[] {
+  if (!tree) {
+    return [];
+  }
+  const edges: LinkEdge[] = [];
+
+  function walk(folder: TreeFolderNode): void {
+    if (folder.indexPageSlug) {
+      for (const child of folder.children ?? []) {
+        if (child.kind === 'page' && child.slug !== folder.indexPageSlug) {
+          edges.push({
+            from: folder.indexPageSlug,
+            to: child.slug,
+            kind: 'parent_of',
+          });
+        }
+      }
+    }
+    for (const child of folder.children ?? []) {
+      if (child.kind === 'folder') {
+        walk(child);
+      }
+    }
+  }
+
+  walk(tree);
+  return edges;
 }

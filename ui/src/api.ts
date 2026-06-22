@@ -119,6 +119,24 @@ export function getDocsTree(): Promise<{ tree: TreeFolderNode; catalogMeta: Reco
   return fetchJson('/api/tree');
 }
 
+export interface BacklinkItem {
+  slug: string;
+  title: string;
+  kind: string;
+}
+
+export function getBacklinks(slug: string): Promise<{ slug: string; backlinks: BacklinkItem[] }> {
+  return fetchJson(`/api/backlinks/${encodeURIComponent(slug)}`);
+}
+
+export function getLinkHealth(): Promise<{
+  orphanCount: number;
+  brokenCount: number;
+  oneWayCount: number;
+}> {
+  return fetchJson('/api/link-health');
+}
+
 export function openDraftForSlug(slug: string): Promise<{ draft: Draft }> {
   return fetchJson('/api/drafts/open', {
     method: 'POST',

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
+import { parseWikilinkTargets, resolveWikilinkTarget } from '../index/link-index.js';
 import {
   DOC_STATUSES,
   DOC_TYPES,
@@ -60,6 +61,22 @@ export function collectCheckReport(index: DocIndex): CheckReport | null {
           path: doc.path,
           message: `broken related slug "${related}"`,
         });
+      }
+    }
+
+    const lookups = {
+      slugSet,
+      titleToSlug: new Map(
+        docs.flatMap((item) => [
+          [item.slug.toLowerCase(), item.slug],
+          [item.title.toLowerCase(), item.slug],
+        ]),
+      ),
+    };
+    for (const raw of parseWikilinkTargets(doc.body)) {
+      const resolved = resolveWikilinkTarget(raw, lookups);
+      if (resolved.broken) {
+        warnings.push(`broken wikilink [[${raw}]] in ${doc.relativePath}`);
       }
     }
   }

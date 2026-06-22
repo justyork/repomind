@@ -1,6 +1,12 @@
 import { isValidSlug } from '../index/slug.js';
 import type { DocIndex } from '../index/doc-index.js';
+import {
+  buildLinkIndex,
+  getOutboundSlugs,
+  type LinkIndexSnapshot,
+} from '../index/link-index.js';
 import type { DocType } from '../index/types.js';
+import { buildDocsTree, collectParentOfEdges } from '../ui/fs-tree.js';
 
 export interface ExploreGraphInput {
   slug: string;
@@ -24,6 +30,12 @@ export interface ExploreGraphResult {
   maxDepthReached: number;
   truncated: boolean;
   broken_links: string[];
+}
+
+function buildSnapshot(index: DocIndex): LinkIndexSnapshot {
+  const docs = index.refresh();
+  const tree = buildDocsTree(index);
+  return buildLinkIndex(docs, collectParentOfEdges(tree));
 }
 
 export function exploreGraph(
@@ -56,9 +68,10 @@ export function exploreGraph(
     maxDepth = 1;
   }
 
+  const linkIndex = buildSnapshot(index);
   const nodes = new Map<string, ExploreGraphNode>();
   const edges: ExploreGraphEdge[] = [];
-  const brokenLinks = new Set<string>();
+  const brokenLinks = new Set<string>(linkIndex.brokenTargets);
   const visited = new Set<string>();
   let maxDepthReached = 0;
   let truncated = false;
@@ -85,22 +98,24 @@ export function exploreGraph(
     });
     maxDepthReached = Math.max(maxDepthReached, current.depth);
 
+    const outbound = getOutboundSlugs(linkIndex, doc.slug);
+
     if (current.depth + 1 >= maxDepth) {
-      if (doc.related.length > 0) {
+      if (outbound.length > 0) {
         truncated = true;
       }
       continue;
     }
 
-    for (const relatedSlug of doc.related) {
-      edges.push({ from: doc.slug, to: relatedSlug });
-      const relatedDoc = index.getDocBySlug(relatedSlug);
-      if (!relatedDoc) {
-        brokenLinks.add(relatedSlug);
+    for (const targetSlug of outbound) {
+      edges.push({ from: doc.slug, to: targetSlug });
+      const targetDoc = index.getDocBySlug(targetSlug);
+      if (!targetDoc) {
+        brokenLinks.add(targetSlug);
         continue;
       }
-      if (!visited.has(relatedSlug)) {
-        queue.push({ slug: relatedSlug, depth: current.depth + 1 });
+      if (!visited.has(targetSlug)) {
+        queue.push({ slug: targetSlug, depth: current.depth + 1 });
       }
     }
   }
@@ -112,4 +127,8 @@ export function exploreGraph(
     truncated,
     broken_links: [...brokenLinks],
   };
+}
+
+export function buildLinkIndexForDocs(index: DocIndex): LinkIndexSnapshot {
+  return buildSnapshot(index);
 }
