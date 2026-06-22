@@ -1,10 +1,13 @@
 import {
   createFsFolder,
   createFsPage,
+  moveFsPage,
+  renameFsPage,
   setCatalogEmoji,
   type Draft,
   type TreeFolderNode,
   type TreeNode,
+  type TreePageNode,
 } from './api.js';
 import { catalogIconLetter } from './catalog.js';
 
@@ -118,6 +121,99 @@ function showCreateMenu(
   });
 }
 
+function collectFolderPaths(node: TreeFolderNode): string[] {
+  const paths: string[] = [node.relativePath];
+  for (const child of node.children ?? []) {
+    if (child.kind === 'folder') {
+      paths.push(...collectFolderPaths(child));
+    }
+  }
+  return paths;
+}
+
+function showPageMenu(
+  anchor: HTMLElement,
+  page: TreePageNode,
+  tree: TreeFolderNode,
+  callbacks: TreeSidebarCallbacks,
+): void {
+  document.querySelector('.tree-page-menu')?.remove();
+
+  const parentPath = page.relativePath.includes('/')
+    ? page.relativePath.slice(0, page.relativePath.lastIndexOf('/'))
+    : '';
+  const folders = collectFolderPaths(tree).filter((path) => path !== parentPath);
+
+  const menu = document.createElement('div');
+  menu.className = 'tree-create-menu tree-page-menu';
+  menu.innerHTML = `
+    <button type="button" data-action="rename">Rename…</button>
+    ${folders.length > 0 ? '<div class="tree-menu-label">Move to</div>' : ''}
+    ${folders
+      .map(
+        (folder) =>
+          `<button type="button" data-action="move" data-folder="${escapeAttr(folder)}">${escapeHtml(folder || '(root)')}</button>`,
+      )
+      .join('')}
+  `;
+
+  const rect = anchor.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.left = `${Math.max(8, rect.left - 120)}px`;
+  document.body.appendChild(menu);
+
+  const close = () => menu.remove();
+  const onDocClick = (event: MouseEvent) => {
+    if (!menu.contains(event.target as Node)) {
+      close();
+      document.removeEventListener('click', onDocClick);
+    }
+  };
+  setTimeout(() => document.addEventListener('click', onDocClick), 0);
+
+  menu.querySelector('[data-action="rename"]')?.addEventListener('click', () => {
+    close();
+    const currentName = page.relativePath.split('/').pop()?.replace(/\.md$/, '') ?? page.name;
+    const newName = window.prompt('New page name (without .md):', currentName);
+    if (!newName?.trim() || newName.trim() === currentName) {
+      return;
+    }
+    void renameFsPage(page.relativePath, newName.trim())
+      .then(({ result }) => {
+        callbacks.onTreeChanged?.();
+        if (result.slugChanged) {
+          callbacks.onError?.(
+            `Renamed; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) may need link updates.`,
+          );
+        }
+        callbacks.onSelectSlug(result.slug);
+      })
+      .catch((err: unknown) => {
+        callbacks.onError?.(err instanceof Error ? err.message : 'Rename failed');
+      });
+  });
+
+  menu.querySelectorAll<HTMLButtonElement>('[data-action="move"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      close();
+      const toDir = button.dataset.folder ?? '';
+      void moveFsPage(page.relativePath, toDir)
+        .then(({ result }) => {
+          callbacks.onTreeChanged?.();
+          if (result.slugChanged && result.inboundWarnings.length > 0) {
+            callbacks.onError?.(
+              `Moved; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) link to the old slug.`,
+            );
+          }
+          callbacks.onSelectSlug(result.slug);
+        })
+        .catch((err: unknown) => {
+          callbacks.onError?.(err instanceof Error ? err.message : 'Move failed');
+        });
+    });
+  });
+}
+
 export function renderTreeSidebar(
   container: HTMLElement,
   tree: TreeFolderNode,
@@ -158,10 +254,16 @@ export function renderTreeSidebar(
         <span class="tree-title">${escapeHtml(node.title)}</span>
       </button>
       <button type="button" class="tree-add" title="Create here">+</button>
+      <button type="button" class="tree-menu" title="Page actions">⋯</button>
     `;
     const parentPath = node.relativePath.includes('/')
       ? node.relativePath.slice(0, node.relativePath.lastIndexOf('/'))
       : '';
+
+    row.querySelector('.tree-menu')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      showPageMenu(event.currentTarget as HTMLElement, node, tree, callbacks);
+    });
 
     row.querySelector('.tree-label')?.addEventListener('click', () => {
       activeSlug = node.slug;
@@ -331,6 +433,10 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+function escapeAttr(text: string): string {
+  return escapeHtml(text);
 }
 
 declare global {

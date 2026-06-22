@@ -81,6 +81,42 @@ function fetchJson(
   });
 }
 
+function postJson(
+  port: number,
+  pathname: string,
+  payload: Record<string, string>,
+): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode ?? 0,
+            body: text ? JSON.parse(text) : null,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 describe('exploreGraphAll', () => {
   it('returns all docs as nodes with edges', () => {
     const repo = makeTempDir();
@@ -156,6 +192,14 @@ describe('UI HTTP API', () => {
 
       const linkHealth = await fetchJson(port, '/api/link-health');
       expect(linkHealth.status).toBe(200);
+
+      const moved = await postJson(port, '/api/fs/move', {
+        fromPath: 'specs/convoy-rules.md',
+        toDir: 'glossary',
+      });
+      expect(moved.status).toBe(200);
+      const movedBody = moved.body as { result: { relativePath: string } };
+      expect(movedBody.result.relativePath).toBe('glossary/convoy-rules.md');
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(staticDir, { recursive: true, force: true });

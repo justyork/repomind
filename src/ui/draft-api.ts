@@ -4,7 +4,7 @@ import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
-import { createFolder, createPageFile } from './fs-operations.js';
+import { createFolder, createPageFile, movePageFile, renamePageFile } from './fs-operations.js';
 import { prepareDocFile } from '../prepare/prepare-docs.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
@@ -122,6 +122,38 @@ export function handleDraftApi(
         target_path: page.relativePath,
       });
       return { status: 201, body: { page, draft } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/move' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const fromPath = typeof body.fromPath === 'string' ? body.fromPath : '';
+    const toDir = typeof body.toDir === 'string' ? body.toDir : '';
+    try {
+      const result = movePageFile(index, fromPath, toDir);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/rename' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const pagePath = typeof body.path === 'string' ? body.path : '';
+    const newName = typeof body.newName === 'string' ? body.newName : '';
+    try {
+      const result = renamePageFile(index, pagePath, newName);
+      return { status: 200, body: { result } };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return jsonError(400, message);

@@ -1,7 +1,13 @@
-import type { Draft } from './api.js';
+import type { Draft, ListDocsItem } from './api.js';
 import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
 import { catalogLabel } from './catalog.js';
+import { bindMarkdownToolbar, markdownToolbarHtml } from './markdown-toolbar.js';
 import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
+import {
+  bindWikilinkAutocomplete,
+  suggestRelatedFromBody,
+  type DocCandidate,
+} from './wikilink-autocomplete.js';
 
 export interface EditorCallbacks {
   onPublished: (path: string) => void;
@@ -17,8 +23,13 @@ export function renderDraftEditor(
   container: HTMLElement,
   draft: Draft,
   callbacks: EditorCallbacks,
-  knownSlugs: string[] = [],
+  docIndex: ListDocsItem[] = [],
 ): void {
+  const docCandidates: DocCandidate[] = docIndex.map((doc) => ({
+    slug: doc.slug,
+    title: doc.title,
+  }));
+  const knownSlugs = docCandidates.map((doc) => doc.slug);
   container.className = 'workspace-main workspace-editor';
   const catalog = catalogLabel(draft.type);
   container.innerHTML = `
@@ -42,6 +53,7 @@ export function renderDraftEditor(
         <div class="split-editor">
           <div class="split-pane">
             <div class="pane-label">Markdown</div>
+            ${markdownToolbarHtml()}
             <textarea id="ed-body" spellcheck="false"></textarea>
           </div>
           <div class="split-pane">
@@ -90,6 +102,14 @@ export function renderDraftEditor(
         <p>Publish to git as markdown?</p>
         <code id="publish-target"></code>
         <pre id="publish-diff" class="diff-preview"></pre>
+        <div id="publish-related" class="publish-related hidden">
+          <p id="publish-related-prompt"></p>
+          <ul id="publish-related-list" class="publish-related-list"></ul>
+          <div class="editor-actions">
+            <button type="button" id="publish-related-apply" class="btn-primary">Add to related</button>
+            <button type="button" id="publish-related-skip" class="btn-ghost">Skip</button>
+          </div>
+        </div>
         <div class="editor-actions">
           <button type="button" id="publish-confirm" class="btn-primary">Confirm</button>
           <button type="button" id="publish-cancel" class="btn-ghost">Cancel</button>
@@ -126,6 +146,8 @@ export function renderDraftEditor(
   }
 
   updatePreview();
+
+  let pendingRelatedSuggestions: string[] = [];
 
   function parseList(raw: string): string[] {
     return raw
@@ -167,6 +189,52 @@ export function renderDraftEditor(
     el.addEventListener('change', onInput);
   }
 
+  bindMarkdownToolbar(container, bodyEl, onInput);
+  bindWikilinkAutocomplete(bodyEl, docCandidates, onInput);
+
+  function showRelatedSuggestions(): void {
+    const relatedSection = container.querySelector<HTMLElement>('#publish-related')!;
+    const promptEl = container.querySelector<HTMLElement>('#publish-related-prompt')!;
+    const listEl = container.querySelector<HTMLElement>('#publish-related-list')!;
+    pendingRelatedSuggestions = suggestRelatedFromBody(
+      bodyEl.value,
+      parseList(relatedEl.value),
+      docCandidates,
+    );
+    if (pendingRelatedSuggestions.length === 0) {
+      relatedSection.classList.add('hidden');
+      return;
+    }
+    promptEl.textContent = `Add ${pendingRelatedSuggestions.length} body link(s) to related?`;
+    listEl.innerHTML = pendingRelatedSuggestions
+      .map((slug) => {
+        const title = docCandidates.find((doc) => doc.slug === slug)?.title ?? slug;
+        return `<li><code>${escapeHtml(slug)}</code> — ${escapeHtml(title)}</li>`;
+      })
+      .join('');
+    relatedSection.classList.remove('hidden');
+  }
+
+  function applyRelatedSuggestions(): void {
+    if (pendingRelatedSuggestions.length === 0) {
+      return;
+    }
+    const merged = [...new Set([...parseList(relatedEl.value), ...pendingRelatedSuggestions])];
+    relatedEl.value = merged.join(', ');
+    pendingRelatedSuggestions = [];
+    container.querySelector('#publish-related')?.classList.add('hidden');
+    scheduleSave();
+  }
+
+  container.querySelector<HTMLButtonElement>('#publish-related-apply')?.addEventListener('click', () => {
+    applyRelatedSuggestions();
+  });
+
+  container.querySelector<HTMLButtonElement>('#publish-related-skip')?.addEventListener('click', () => {
+    pendingRelatedSuggestions = [];
+    container.querySelector('#publish-related')?.classList.add('hidden');
+  });
+
   container.querySelector<HTMLButtonElement>('#ed-publish')?.addEventListener('click', () => {
     void (async () => {
       if (saveTimer) {
@@ -183,6 +251,7 @@ export function renderDraftEditor(
       });
 
       openPublishModal();
+      showRelatedSuggestions();
       const target = container.querySelector<HTMLElement>('#publish-target')!;
       const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
       target.textContent = `docs/.../${slugEl.value}.md`;

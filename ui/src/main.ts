@@ -187,7 +187,7 @@ async function main(): Promise<void> {
         })();
       },
       onError: (message) => showToast(message, true),
-    }, knownSlugs());
+    }, docIndex);
   }
 
   async function startEdit(slug: string): Promise<void> {

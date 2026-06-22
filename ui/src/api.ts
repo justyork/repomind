@@ -165,6 +165,36 @@ export function createFsPage(
   });
 }
 
+export interface FsPageMutationResult {
+  relativePath: string;
+  slug: string;
+  previousSlug: string;
+  slugChanged: boolean;
+  inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export function moveFsPage(
+  fromPath: string,
+  toDir: string,
+): Promise<{ result: FsPageMutationResult }> {
+  return fetchJson('/api/fs/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fromPath, toDir }),
+  });
+}
+
+export function renameFsPage(
+  pagePath: string,
+  newName: string,
+): Promise<{ result: FsPageMutationResult }> {
+  return fetchJson('/api/fs/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: pagePath, newName }),
+  });
+}
+
 export function setCatalogEmoji(folderPath: string, emoji: string): Promise<{ meta: Record<string, string> }> {
   return fetchJson('/api/catalog-meta', {
     method: 'PUT',
