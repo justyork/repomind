@@ -1,15 +1,17 @@
-import { marked } from 'marked';
 import type { Draft } from './api.js';
 import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
 import { catalogLabel } from './catalog.js';
+import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
 
 export interface EditorCallbacks {
   onPublished: (path: string) => void;
   onDeleted: () => void;
+  onClosed: () => void;
   onError: (message: string) => void;
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
+let previewMermaidTimer: ReturnType<typeof setTimeout> | null = null;
 
 export function renderDraftEditor(
   container: HTMLElement,
@@ -33,7 +35,8 @@ export function renderDraftEditor(
           <input id="ed-title" class="title-input doc-title" type="text" placeholder="Document title" />
           <div class="workspace-actions">
             <button type="button" id="ed-publish" class="btn-primary">Publish</button>
-            <button type="button" id="ed-discard" class="btn-ghost">Discard</button>
+            <button type="button" id="ed-close" class="btn-ghost">Close</button>
+            <button type="button" id="ed-discard" class="btn-ghost">Discard draft</button>
           </div>
         </header>
         <div class="split-editor">
@@ -63,6 +66,7 @@ export function renderDraftEditor(
               <option value="glossary-term">glossary-term</option>
               <option value="open-question">open-question</option>
               <option value="agent-instruction">agent-instruction</option>
+              <option value="wiki-page">wiki-page</option>
             </select>
           </div>
           <div class="field"><label>Status</label>
@@ -111,7 +115,17 @@ export function renderDraftEditor(
   tagsEl.value = draft.tags.join(', ');
   relatedEl.value = draft.related.join(', ');
   bodyEl.value = draft.body;
-  previewEl.innerHTML = marked.parse(draft.body, { async: false }) as string;
+  function updatePreview(): void {
+    previewEl.innerHTML = renderMarkdown(bodyEl.value);
+    if (previewMermaidTimer) {
+      clearTimeout(previewMermaidTimer);
+    }
+    previewMermaidTimer = setTimeout(() => {
+      void enhanceMarkdownPreview(previewEl);
+    }, 350);
+  }
+
+  updatePreview();
 
   function parseList(raw: string): string[] {
     return raw
@@ -140,7 +154,7 @@ export function renderDraftEditor(
   }
 
   const onInput = () => {
-    previewEl.innerHTML = marked.parse(bodyEl.value, { async: false }) as string;
+    updatePreview();
     const catalogEl = container.querySelector<HTMLInputElement>('#ed-catalog');
     if (catalogEl) {
       catalogEl.value = catalogLabel(typeEl.value);
@@ -240,6 +254,10 @@ export function renderDraftEditor(
     })().catch((err: unknown) => {
       callbacks.onError(err instanceof Error ? err.message : 'Publish failed');
     });
+  });
+
+  container.querySelector<HTMLButtonElement>('#ed-close')?.addEventListener('click', () => {
+    callbacks.onClosed();
   });
 
   container.querySelector<HTMLButtonElement>('#ed-discard')?.addEventListener('click', () => {

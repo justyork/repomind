@@ -3,6 +3,7 @@ export interface ListDocsItem {
   type: string;
   title: string;
   status: string;
+  relativePath: string;
 }
 
 export interface SearchResult {
@@ -90,6 +91,68 @@ export interface Draft {
   tags: string[];
   related: string[];
   forked_from: string | null;
+  target_path?: string | null;
+}
+
+export interface TreePageNode {
+  kind: 'page';
+  name: string;
+  relativePath: string;
+  slug: string;
+  title: string;
+  status: string;
+  type: string;
+}
+
+export interface TreeFolderNode {
+  kind: 'folder';
+  name: string;
+  relativePath: string;
+  emoji: string | null;
+  indexPageSlug: string | null;
+  children: TreeNode[];
+}
+
+export type TreeNode = TreePageNode | TreeFolderNode;
+
+export function getDocsTree(): Promise<{ tree: TreeFolderNode; catalogMeta: Record<string, string> }> {
+  return fetchJson('/api/tree');
+}
+
+export function openDraftForSlug(slug: string): Promise<{ draft: Draft }> {
+  return fetchJson('/api/drafts/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  });
+}
+
+export function createFsFolder(parentPath: string, name: string): Promise<{ result: { relativePath: string } }> {
+  return fetchJson('/api/fs/folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentPath, name }),
+  });
+}
+
+export function createFsPage(
+  parentPath: string,
+  name: string,
+  title?: string,
+): Promise<{ page: { slug: string; relativePath: string }; draft: Draft }> {
+  return fetchJson('/api/fs/page', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentPath, name, title }),
+  });
+}
+
+export function setCatalogEmoji(folderPath: string, emoji: string): Promise<{ meta: Record<string, string> }> {
+  return fetchJson('/api/catalog-meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: folderPath, emoji }),
+  });
 }
 
 export function listDrafts(): Promise<{ drafts: Draft[] }> {

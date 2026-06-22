@@ -5,6 +5,7 @@ import type { DocIndex } from '../index/doc-index.js';
 import { isValidSlug, resolveDocPath } from '../index/slug.js';
 import { TYPE_TO_DIR, isDocStatus, isDocType } from '../index/types.js';
 import type { DraftRow } from './db/drafts-db.js';
+import { resolveRelativeMdPath } from './safe-path.js';
 
 export interface PublishResult {
   path: string;
@@ -14,6 +15,27 @@ export interface PublishResult {
 export interface PublishError {
   code: 'invalid_slug' | 'invalid_type' | 'invalid_status' | 'path_conflict' | 'broken_related';
   message: string;
+}
+
+export function resolvePublishTargetPath(index: DocIndex, draft: DraftRow): string | null {
+  const knowledgeRoot = index.getKnowledgeRoot();
+  if (!knowledgeRoot) {
+    return null;
+  }
+
+  if (draft.target_path) {
+    return resolveRelativeMdPath(knowledgeRoot, draft.target_path);
+  }
+
+  if (draft.forked_from) {
+    const doc = index.getDocBySlug(draft.forked_from);
+    if (doc) {
+      return doc.path;
+    }
+  }
+
+  const typeDir = TYPE_TO_DIR[draft.type];
+  return resolveDocPath(knowledgeRoot, typeDir, draft.slug);
 }
 
 export function validateDraftForPublish(
@@ -35,8 +57,7 @@ export function validateDraftForPublish(
     return { code: 'path_conflict', message: 'no knowledge root' };
   }
 
-  const typeDir = TYPE_TO_DIR[draft.type];
-  const targetPath = resolveDocPath(knowledgeRoot, typeDir, draft.slug);
+  const targetPath = resolvePublishTargetPath(index, draft);
   if (!targetPath) {
     return { code: 'invalid_slug', message: `cannot resolve path for slug: ${draft.slug}` };
   }
@@ -81,8 +102,7 @@ export function publishDraft(index: DocIndex, draft: DraftRow): PublishResult {
   }
 
   const knowledgeRoot = index.getKnowledgeRoot()!;
-  const typeDir = TYPE_TO_DIR[draft.type];
-  const targetPath = resolveDocPath(knowledgeRoot, typeDir, draft.slug)!;
+  const targetPath = resolvePublishTargetPath(index, draft)!;
 
   const markdown = buildMarkdownFromDraft(draft);
   fs.mkdirSync(path.dirname(targetPath), { recursive: true });

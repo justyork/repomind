@@ -11,6 +11,8 @@ import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
 import { searchDocs } from '../tools/search-docs.js';
 import { ALL_GRAPH_SLUG, exploreGraphAll } from './graph-all.js';
+import { buildDocsTree } from './fs-tree.js';
+import { readCatalogMeta } from './catalog-meta.js';
 import { computeKnowledgeStats } from './stats.js';
 
 export interface ApiResponse {
@@ -100,6 +102,14 @@ export function handleApiRequest(
       return jsonError(404, 'no docs/ directory found');
     }
     return { status: 200, body: report };
+  }
+
+  if (pathname === '/api/tree') {
+    const tree = buildDocsTree(index);
+    if (!tree) {
+      return jsonError(404, 'no docs/ directory found');
+    }
+    return { status: 200, body: { tree, catalogMeta: readCatalogMeta(index.getKnowledgeRoot()!) } };
   }
 
   if (pathname === '/api/unprepared') {

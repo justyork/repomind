@@ -1,10 +1,9 @@
-import { marked } from 'marked';
+import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
 import { catalogLabel } from './catalog.js';
 import type { DocDetail } from './api.js';
 
 export interface DocPanelOptions {
-  onFork?: (slug: string) => void;
-  onNavigateCatalog?: (type: string) => void;
+  onEdit?: (slug: string) => void;
 }
 
 export function renderDocPanel(
@@ -18,7 +17,7 @@ export function renderDocPanel(
     container.innerHTML = `
       <div class="workspace-empty">
         <h1>Knowledge</h1>
-        <p class="placeholder">Select a page from the catalog tree or create a new draft.</p>
+        <p class="placeholder">Select a page from the tree or create one with +.</p>
       </div>
     `;
     return;
@@ -49,7 +48,7 @@ export function renderDocPanel(
         <header class="page-header">
           <h1 class="doc-title">${escapeHtml(title)}</h1>
           <div class="workspace-actions">
-            <button type="button" id="fork-draft" class="btn-primary">Edit as draft</button>
+            <button type="button" id="edit-page" class="btn-primary">Edit</button>
             <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
           </div>
         </header>
@@ -85,7 +84,8 @@ export function renderDocPanel(
   `;
 
   const previewEl = container.querySelector<HTMLDivElement>('#tab-preview')!;
-  previewEl.innerHTML = marked.parse(doc.body ?? '', { async: false }) as string;
+  previewEl.innerHTML = renderMarkdown(doc.body ?? '');
+  void enhanceMarkdownPreview(previewEl);
 
   const fmEl = container.querySelector<HTMLDivElement>('#tab-frontmatter')!;
   fmEl.innerHTML = `<pre class="frontmatter-yaml"></pre>`;
@@ -111,15 +111,9 @@ export function renderDocPanel(
     }
   });
 
-  container.querySelector<HTMLButtonElement>('#fork-draft')?.addEventListener('click', () => {
-    if (doc.slug && options.onFork) {
-      options.onFork(doc.slug);
-    }
-  });
-
-  container.querySelector<HTMLButtonElement>('[data-crumb="catalog"]')?.addEventListener('click', () => {
-    if (type && options.onNavigateCatalog) {
-      options.onNavigateCatalog(type);
+  container.querySelector<HTMLButtonElement>('#edit-page')?.addEventListener('click', () => {
+    if (doc.slug && options.onEdit) {
+      options.onEdit(doc.slug);
     }
   });
 

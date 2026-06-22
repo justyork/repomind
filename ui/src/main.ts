@@ -1,21 +1,22 @@
 import {
-  createDraft,
   getDoc,
+  getDocsTree,
   getHealth,
   listDocs,
   listDrafts,
+  openDraftForSlug,
   searchDocs,
   type Draft,
   type ListDocsItem,
   type SearchResult,
+  type TreeFolderNode,
 } from './api.js';
 import { catalogLabel } from './catalog.js';
 import { renderDashboard } from './dashboard.js';
 import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
-import { showNewDraftModal } from './new-draft-modal.js';
-import { renderSidebar } from './sidebar.js';
 import { bindThemeToggle, initTheme } from './theme.js';
+import { renderTreeSidebar } from './tree-sidebar.js';
 
 initTheme();
 
@@ -39,6 +40,12 @@ async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
   const { drafts } = await listDrafts();
   sidebarEl.refreshDrafts?.(drafts);
   return drafts;
+}
+
+async function reloadTree(sidebarEl: HTMLElement): Promise<TreeFolderNode> {
+  const [{ tree }, { drafts }] = await Promise.all([getDocsTree(), listDrafts()]);
+  sidebarEl.refreshTree?.(tree, drafts);
+  return tree;
 }
 
 async function main(): Promise<void> {
@@ -68,7 +75,7 @@ async function main(): Promise<void> {
         },
         onPublished: (path) => {
           void (async () => {
-            await reloadDrafts(sidebarEl);
+            await reloadTree(sidebarEl);
             await refreshStats();
             showToast(`Published: ${path}`);
           })();
@@ -159,21 +166,38 @@ async function main(): Promise<void> {
     renderDraftEditor(workspaceEl, draft, {
       onPublished: (path) => {
         void (async () => {
-          await reloadDrafts(sidebarEl);
+          const docsRes = await listDocs();
+          docs = docsRes.docs;
+          await reloadTree(sidebarEl);
           await refreshStats();
           void dashboardRefresh?.();
           showToast(`Published: ${path}`);
           await selectSlug(draft.slug);
         })();
       },
+      onClosed: () => {
+        void selectSlug(draft.forked_from ?? draft.slug).catch(() => {
+          renderDocPanel(workspaceEl, null);
+        });
+      },
       onDeleted: () => {
         void (async () => {
-          await reloadDrafts(sidebarEl);
+          await reloadTree(sidebarEl);
           renderDocPanel(workspaceEl, null);
         })();
       },
       onError: (message) => showToast(message, true),
     }, knownSlugs());
+  }
+
+  async function startEdit(slug: string): Promise<void> {
+    try {
+      const { draft } = await openDraftForSlug(slug);
+      await reloadDrafts(sidebarEl);
+      openDraft(draft);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Edit failed', true);
+    }
   }
 
   async function selectSlug(slug: string): Promise<void> {
@@ -186,17 +210,8 @@ async function main(): Promise<void> {
     try {
       const doc = await getDoc(slug);
       renderDocPanel(workspaceEl, doc, {
-        onFork: (forkSlug) => {
-          void createDraft({ forkFrom: forkSlug })
-            .then(({ draft }) => {
-              void reloadDrafts(sidebarEl).then(() => openDraft(draft));
-            })
-            .catch((err: unknown) => {
-              showToast(err instanceof Error ? err.message : 'Fork failed', true);
-            });
-        },
-        onNavigateCatalog: (type) => {
-          sidebarEl.querySelector<HTMLButtonElement>(`[data-catalog="${type}"]`)?.click();
+        onEdit: (slug) => {
+          void startEdit(slug);
         },
       });
     } catch (err) {
@@ -211,29 +226,27 @@ async function main(): Promise<void> {
   try {
     await refreshStats();
 
-    const docsRes = await listDocs();
+    const [docsRes, { tree }, { drafts }] = await Promise.all([
+      listDocs(),
+      getDocsTree(),
+      listDrafts(),
+    ]);
     docs = docsRes.docs;
-    const drafts = await reloadDrafts(sidebarEl);
 
-    renderSidebar(sidebarEl, docs, drafts, {
+    renderTreeSidebar(sidebarEl, tree, drafts, {
       onSelectSlug: (slug) => {
         void selectSlug(slug);
       },
       onSelectDraft: (draft) => openDraft(draft),
-      onNewDraft: () => {
-        void showNewDraftModal(knownSlugs()).then((values) => {
-          if (!values) {
-            return;
-          }
-          void createDraft({ slug: values.slug, type: values.type })
-            .then(({ draft }) => {
-              void reloadDrafts(sidebarEl).then(() => openDraft(draft));
-            })
-            .catch((err: unknown) => {
-              showToast(err instanceof Error ? err.message : 'Create failed', true);
-            });
-        });
+      onTreeChanged: () => {
+        void (async () => {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          await reloadTree(sidebarEl);
+          await refreshStats();
+        })();
       },
+      onError: (message) => showToast(message, true),
     });
 
     renderDocPanel(workspaceEl, null);
