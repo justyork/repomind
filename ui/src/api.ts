@@ -177,6 +177,7 @@ export interface FsPageMutationResult {
   previousSlug: string;
   slugChanged: boolean;
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export function moveFsPage(
@@ -205,12 +206,14 @@ export interface FsDeletePageResult {
   relativePath: string;
   slug: string;
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export interface FsDeleteFolderResult {
   relativePath: string;
   deletedSlugs: string[];
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export function deleteFsNode(

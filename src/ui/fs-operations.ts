@@ -16,6 +16,7 @@ import {
   resolveRelativeMdPath,
   resolveUnderKnowledgeRoot,
 } from './safe-path.js';
+import { cascadeSlugDelete, cascadeSlugRename, toRelativePaths } from './link-cascade.js';
 
 export interface CreateFolderResult {
   relativePath: string;
@@ -36,18 +37,21 @@ export interface FsPageMutationResult {
   previousSlug: string;
   slugChanged: boolean;
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export interface FsDeletePageResult {
   relativePath: string;
   slug: string;
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export interface FsDeleteFolderResult {
   relativePath: string;
   deletedSlugs: string[];
   inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
 }
 
 export interface CreatePageOptions {
@@ -229,6 +233,17 @@ export function movePageFile(
   fs.renameSync(sourceAbsolute, destAbsolute);
 
   const { newSlug } = rewritePageFrontmatter(destAbsolute, destRelative);
+
+  let cascadeUpdated: string[] = [];
+  if (newSlug !== previousSlug) {
+    cascadeUpdated = toRelativePaths(
+      knowledgeRoot,
+      cascadeSlugRename(knowledgeRoot, previousSlug, newSlug, {
+        excludeAbsolutePath: destAbsolute,
+      }),
+    );
+  }
+
   index.refresh();
 
   return {
@@ -238,6 +253,7 @@ export function movePageFile(
     previousSlug,
     slugChanged: newSlug !== previousSlug,
     inboundWarnings: previousSlug !== newSlug ? inboundWarnings : [],
+    cascadeUpdated,
   };
 }
 
@@ -281,6 +297,17 @@ export function renamePageFile(
   fs.renameSync(sourceAbsolute, destAbsolute);
 
   const { newSlug } = rewritePageFrontmatter(destAbsolute, destRelative);
+
+  let cascadeUpdated: string[] = [];
+  if (newSlug !== previousSlug) {
+    cascadeUpdated = toRelativePaths(
+      knowledgeRoot,
+      cascadeSlugRename(knowledgeRoot, previousSlug, newSlug, {
+        excludeAbsolutePath: destAbsolute,
+      }),
+    );
+  }
+
   index.refresh();
 
   return {
@@ -290,6 +317,7 @@ export function renamePageFile(
     previousSlug,
     slugChanged: newSlug !== previousSlug,
     inboundWarnings: previousSlug !== newSlug ? inboundWarnings : [],
+    cascadeUpdated,
   };
 }
 
@@ -346,6 +374,11 @@ export function deletePageFile(index: DocIndex, pagePath: string): FsDeletePageR
   const slug = readPageSlug(absolutePath);
   const inboundWarnings = collectInboundWarnings(index, slug);
 
+  const cascadeUpdated = toRelativePaths(
+    knowledgeRoot,
+    cascadeSlugDelete(knowledgeRoot, slug, { excludeAbsolutePaths: [absolutePath] }),
+  );
+
   fs.unlinkSync(absolutePath);
   index.refresh();
 
@@ -353,6 +386,7 @@ export function deletePageFile(index: DocIndex, pagePath: string): FsDeletePageR
     relativePath: normalized,
     slug,
     inboundWarnings,
+    cascadeUpdated,
   };
 }
 
@@ -381,6 +415,15 @@ export function deleteFolder(index: DocIndex, folderPath: string): FsDeleteFolde
     deletedSlugs.map((slug) => collectInboundWarnings(index, slug)),
   );
 
+  const cascadeUpdated = new Set<string>();
+  for (const deletedSlug of deletedSlugs) {
+    for (const updatedPath of cascadeSlugDelete(knowledgeRoot, deletedSlug, {
+      excludeAbsolutePaths: markdownFiles,
+    })) {
+      cascadeUpdated.add(updatedPath);
+    }
+  }
+
   fs.rmSync(absolutePath, { recursive: true, force: true });
   index.refresh();
 
@@ -388,5 +431,6 @@ export function deleteFolder(index: DocIndex, folderPath: string): FsDeleteFolde
     relativePath: normalized,
     deletedSlugs,
     inboundWarnings,
+    cascadeUpdated: toRelativePaths(knowledgeRoot, [...cascadeUpdated]),
   };
 }

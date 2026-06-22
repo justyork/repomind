@@ -286,6 +286,7 @@ async function main(): Promise<void> {
         })();
       },
       onError: (message) => showToast(message, true),
+      onNotify: (message) => showToast(message),
     });
 
     subscribeDocsReload(() => {

@@ -20,6 +20,7 @@ export interface TreeSidebarCallbacks {
   onTreeChanged?: () => void;
   onFsDeleted?: (deletedSlugs: string[]) => void;
   onError?: (message: string) => void;
+  onNotify?: (message: string) => void;
 }
 
 const EXPANDED_KEY = 'repomind-tree-expanded';
@@ -231,9 +232,13 @@ function showContextMenu(
     void renameFsPage(page.relativePath, newName.trim())
       .then(({ result }) => {
         callbacks.onTreeChanged?.();
-        if (result.slugChanged) {
+        if (result.cascadeUpdated.length > 0) {
+          callbacks.onNotify?.(
+            `Renamed to ${result.slug}; updated links in ${result.cascadeUpdated.length} file(s).`,
+          );
+        } else if (result.slugChanged && result.inboundWarnings.length > 0) {
           callbacks.onError?.(
-            `Renamed; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) may need link updates.`,
+            `Renamed to ${result.slug}; ${result.inboundWarnings.length} page(s) may still reference the old slug.`,
           );
         }
         callbacks.onSelectSlug(result.slug);
@@ -253,9 +258,13 @@ function showContextMenu(
       void moveFsPage(page.relativePath, toDir)
         .then(({ result }) => {
           callbacks.onTreeChanged?.();
-          if (result.slugChanged && result.inboundWarnings.length > 0) {
+          if (result.cascadeUpdated.length > 0) {
+            callbacks.onNotify?.(
+              `Moved to ${result.relativePath}; updated links in ${result.cascadeUpdated.length} file(s).`,
+            );
+          } else if (result.slugChanged && result.inboundWarnings.length > 0) {
             callbacks.onError?.(
-              `Moved; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) link to the old slug.`,
+              `Moved; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) still reference the old slug.`,
             );
           }
           callbacks.onSelectSlug(result.slug);
@@ -278,9 +287,13 @@ function showContextMenu(
       .then(({ result }) => {
         callbacks.onFsDeleted?.([result.slug]);
         callbacks.onTreeChanged?.();
-        if (result.inboundWarnings.length > 0) {
+        if (result.cascadeUpdated.length > 0) {
+          callbacks.onNotify?.(
+            `Deleted ${result.slug}; cleaned links in ${result.cascadeUpdated.length} file(s).`,
+          );
+        } else if (result.inboundWarnings.length > 0) {
           callbacks.onError?.(
-            `${result.inboundWarnings.length} page(s) still link to deleted slug "${result.slug}".`,
+            `${result.inboundWarnings.length} page(s) still reference deleted slug "${result.slug}".`,
           );
         }
       })
@@ -301,9 +314,13 @@ function showContextMenu(
       .then(({ result }) => {
         callbacks.onFsDeleted?.(result.deletedSlugs);
         callbacks.onTreeChanged?.();
-        if (result.inboundWarnings.length > 0) {
+        if (result.cascadeUpdated.length > 0) {
+          callbacks.onNotify?.(
+            `Deleted folder; cleaned links in ${result.cascadeUpdated.length} file(s).`,
+          );
+        } else if (result.inboundWarnings.length > 0) {
           callbacks.onError?.(
-            `${result.inboundWarnings.length} page(s) still link to deleted page(s).`,
+            `${result.inboundWarnings.length} page(s) still reference deleted page(s).`,
           );
         }
       })

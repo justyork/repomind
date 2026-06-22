@@ -54,15 +54,34 @@ related:
 See [[caravan]].
 `,
     );
+    writeDoc(
+      repo,
+      'docs/glossary/backlink.md',
+      `---
+type: glossary-term
+slug: backlink
+status: accepted
+title: Backlink
+related:
+  - convoy-rules
+---
+Uses [[convoy-rules]].
+`,
+    );
 
     const index = new DocIndex(repo);
     const result = movePageFile(index, 'specs/convoy-rules.md', 'glossary');
 
     expect(result.relativePath).toBe('glossary/convoy-rules.md');
-    expect(fs.existsSync(path.join(repo, 'docs/glossary/convoy-rules.md'))).toBe(true);
-    expect(fs.existsSync(path.join(repo, 'docs/specs/convoy-rules.md'))).toBe(false);
-    expect(result.inboundWarnings.some((w) => w.slug === 'caravan')).toBe(false);
-    expect(index.getDocBySlug(result.slug)).toBeTruthy();
+    expect(result.slug).toBe('glossary-convoy-rules');
+    expect(result.slugChanged).toBe(true);
+    expect(result.cascadeUpdated).toContain('glossary/backlink.md');
+
+    const backlinkRaw = fs.readFileSync(path.join(repo, 'docs/glossary/backlink.md'), 'utf8');
+    expect(backlinkRaw).toContain('[[glossary-convoy-rules]]');
+    expect(backlinkRaw).toContain('related:\n  - glossary-convoy-rules');
+    expect(backlinkRaw).not.toMatch(/\[\[convoy-rules\]\]/);
+    expect(backlinkRaw).not.toMatch(/related:\n(?:  - .+\n)*  - convoy-rules/);
   });
 
   it('renames a page file in place', () => {
