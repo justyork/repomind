@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
+import { resolveAssetRelativePath } from '../index/resolve-asset-href.js';
 import { parseWikilinkTargets, resolveWikilinkTarget } from '../index/link-index.js';
+import { assetExists } from '../ui/serve-asset.js';
 import {
   DOC_STATUSES,
   DOC_TYPES,
@@ -88,6 +90,27 @@ export function collectCheckReport(index: DocIndex): CheckReport | null {
       const resolved = resolveWikilinkTarget(raw, lookups);
       if (resolved.broken) {
         warnings.push(`broken wikilink [[${raw}]] in ${doc.relativePath}`);
+      }
+    }
+
+    const imagePattern = /!\[[^\]]*\]\(([^)]+)\)/g;
+    for (const match of doc.body.matchAll(imagePattern)) {
+      const href = match[1]?.trim() ?? '';
+      if (
+        !href ||
+        href.startsWith('http://') ||
+        href.startsWith('https://') ||
+        href.startsWith('data:')
+      ) {
+        continue;
+      }
+      const relative = resolveAssetRelativePath(doc.relativePath, href);
+      if (!relative) {
+        warnings.push(`unresolved image path "${href}" in ${doc.relativePath}`);
+        continue;
+      }
+      if (!assetExists(knowledgeRoot, relative)) {
+        warnings.push(`missing image asset "${relative}" in ${doc.relativePath}`);
       }
     }
   }

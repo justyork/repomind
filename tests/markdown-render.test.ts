@@ -14,4 +14,13 @@ describe('renderMarkdown', () => {
     expect(html).toContain('class="mermaid"');
     expect(html).toContain('graph LR');
   });
+
+  it('rewrites relative image paths to asset API URLs', () => {
+    const html = renderMarkdown('![Diagram](../assets/diagram.png)', {
+      docRelativePath: 'specs/feature.md',
+      slugByRelative: new Map(),
+    });
+    expect(html).toContain('src="/api/assets/assets/diagram.png"');
+    expect(html).toContain('class="markdown-image"');
+  });
 });

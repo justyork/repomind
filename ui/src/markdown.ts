@@ -1,6 +1,6 @@
 import { marked, type Tokens } from 'marked';
 
-import { slugForMarkdownHref } from './resolve-md-href.js';
+import { slugForMarkdownHref, assetApiUrl } from './resolve-md-href.js';
 
 let configured = false;
 let renderContext: MarkdownRenderContext | null = null;
@@ -70,6 +70,22 @@ function configureMarked(): void {
         } disabled>`;
         const content = this.parser.parse(item.tokens, !!item.loose).trim();
         return `<li class="task-list-item"><label class="task-list-item-label">${checkbox}<span class="task-list-item-content">${content}</span></label></li>\n`;
+      },
+      image({ href, text, title }) {
+        if (!href) {
+          return false;
+        }
+        if (href.startsWith('http://') || href.startsWith('https://') || href.startsWith('data:')) {
+          return false;
+        }
+        if (renderContext) {
+          const apiUrl = assetApiUrl(renderContext.docRelativePath, href);
+          if (apiUrl) {
+            const alt = escapeHtml(text || title || '');
+            return `<img src="${escapeHtml(apiUrl)}" alt="${alt}" loading="lazy" class="markdown-image">`;
+          }
+        }
+        return false;
       },
       link({ href, text }) {
         if (href?.startsWith('#wikilink:')) {

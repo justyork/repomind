@@ -8,6 +8,7 @@ import { routeApi, handleDocsEvents } from './api-handlers.js';
 import type { DocsWatcher } from './docs-watcher.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { handleDraftApi } from './draft-api.js';
+import { serveKnowledgeAsset } from './serve-asset.js';
 
 export interface UiServerOptions {
   host?: string;
@@ -110,6 +111,16 @@ export function createUiServer(options: UiServerOptions): http.Server {
       const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
 
       if (urlPath.startsWith('/api/')) {
+        if (urlPath.startsWith('/api/assets/') && method === 'GET') {
+          const knowledgeRoot = index.getKnowledgeRoot();
+          if (!knowledgeRoot) {
+            sendJson(res, 404, { error: 'no docs/ directory found' });
+            return;
+          }
+          serveKnowledgeAsset(res, knowledgeRoot, urlPath.slice('/api/assets/'.length));
+          return;
+        }
+
         if (urlPath === '/api/events' && method === 'GET') {
           handleDocsEvents(req, res, docsWatcher);
           return;

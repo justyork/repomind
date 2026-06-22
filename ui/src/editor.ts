@@ -135,8 +135,17 @@ export function renderDraftEditor(
   tagsEl.value = draft.tags.join(', ');
   relatedEl.value = draft.related.join(', ');
   bodyEl.value = draft.body;
+
+  const markdownContext =
+    draft.target_path && docIndex.length > 0
+      ? {
+          docRelativePath: draft.target_path,
+          slugByRelative: new Map(docIndex.map((doc) => [doc.relativePath, doc.slug])),
+        }
+      : undefined;
+
   function updatePreview(): void {
-    previewEl.innerHTML = renderMarkdown(bodyEl.value);
+    previewEl.innerHTML = renderMarkdown(bodyEl.value, markdownContext);
     if (previewMermaidTimer) {
       clearTimeout(previewMermaidTimer);
     }

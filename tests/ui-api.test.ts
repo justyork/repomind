@@ -206,6 +206,48 @@ describe('UI HTTP API', () => {
     }
   });
 
+  it('serves image assets from docs/', async () => {
+    const repo = makeTempDir();
+    fixtureKnowledge(repo);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z5BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const assetPath = path.join(repo, 'docs/assets/logo.png');
+    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+    fs.writeFileSync(assetPath, png);
+
+    const index = new DocIndex(repo);
+    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-mind-static-'));
+    const server = createUiServer({ port: 0, index, staticDir, host: '127.0.0.1' });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('no port');
+    }
+    const port = addr.port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/assets/assets/logo.png`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      const body = Buffer.from(await res.arrayBuffer());
+      expect(body.equals(png)).toBe(true);
+
+      const missing = await fetch(`http://127.0.0.1:${port}/api/assets/assets/missing.png`);
+      expect(missing.status).toBe(404);
+
+      const notImage = await fetch(`http://127.0.0.1:${port}/api/assets/glossary/caravan.md`);
+      expect(notImage.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
   it('serves check and draft diff endpoints', async () => {
     const repo = makeTempDir();
     fixtureKnowledge(repo);

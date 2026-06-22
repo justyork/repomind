@@ -139,3 +139,73 @@ export function slugForMarkdownHref(
 
   return null;
 }
+
+const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'];
+
+function isImageFileName(name: string): boolean {
+  const lower = name.toLowerCase();
+  return IMAGE_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
+function resolveAssetRelativePath(fromDocRelative: string, href: string): string | null {
+  const pathPart = stripLinkSuffix(href);
+  if (
+    !pathPart ||
+    pathPart.startsWith('http://') ||
+    pathPart.startsWith('https://') ||
+    pathPart.startsWith('mailto:') ||
+    pathPart.startsWith('#') ||
+    pathPart.startsWith('data:')
+  ) {
+    return null;
+  }
+
+  let docsPath = pathPart.replace(/\\/g, '/');
+  if (docsPath.startsWith('/')) {
+    docsPath = docsPath.slice(1);
+  }
+  if (!docsPath.startsWith('docs/')) {
+    docsPath = '';
+  } else {
+    docsPath = docsPath.slice(5);
+  }
+  if (docsPath && !docsPath.split('/').includes('..') && isImageFileName(docsPath)) {
+    return docsPath;
+  }
+
+  const fromDir = fromDocRelative.includes('/')
+    ? fromDocRelative.slice(0, fromDocRelative.lastIndexOf('/'))
+    : '';
+
+  const segments = pathPart.replace(/\\/g, '/').split('/');
+  const stack = fromDir ? fromDir.split('/') : [];
+
+  for (const segment of segments) {
+    if (!segment || segment === '.') {
+      continue;
+    }
+    if (segment === '..') {
+      if (stack.length === 0) {
+        return null;
+      }
+      stack.pop();
+      continue;
+    }
+    stack.push(segment);
+  }
+
+  const relative = stack.join('/');
+  if (relative && isImageFileName(relative)) {
+    return relative;
+  }
+
+  return null;
+}
+
+export function assetApiUrl(fromDocRelative: string, href: string): string | null {
+  const relative = resolveAssetRelativePath(fromDocRelative, href);
+  if (!relative) {
+    return null;
+  }
+  return `/api/assets/${relative.split('/').map(encodeURIComponent).join('/')}`;
+}
