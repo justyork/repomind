@@ -15,7 +15,7 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
   const index = new DocIndex(cwd);
 
   if (!index.getKnowledgeRoot()) {
-    console.error('no .project-knowledge/ found — run `repo-mind init`');
+    console.error('no docs/ found — run `repo-mind init` or create a docs/ directory');
     return 1;
   }
 

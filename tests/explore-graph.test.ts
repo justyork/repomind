@@ -21,7 +21,7 @@ function writeDoc(
   related: string[] = [],
 ): void {
   const relatedLines = related.length > 0 ? `related:\n${related.map((r) => `  - ${r}`).join('\n')}` : '';
-  const filePath = path.join(root, '.project-knowledge', typeDir, `${slug}.md`);
+  const filePath = path.join(root, 'docs', typeDir, `${slug}.md`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(
     filePath,

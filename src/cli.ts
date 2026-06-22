@@ -7,7 +7,7 @@ import { runUi } from './commands/ui.js';
 import { startMcpServer } from './mcp/server.js';
 
 function printHelp(): void {
-  console.log(`repo-mind — MCP-first project memory
+  console.log(`repo-mind — unified docs workspace for humans and AI agents
 
 Usage:
   repo-mind init [--cwd <dir>]
@@ -18,12 +18,12 @@ Usage:
   repo-mind ui [--port <n>] [--cwd <dir>]
 
 Commands:
-  init    Scaffold .project-knowledge/ with example docs
+  init    Scaffold docs/ with example structured pages
   setup   Configure Cursor/Claude MCP and CLAUDE.md snippet
   check   Validate frontmatter schema and related links
   export  Write agents.md export to repo root
   mcp     Start the MCP stdio server
-  ui      Local read-only knowledge graph workspace (127.0.0.1)
+  ui      Confluence-style workspace over docs/ (127.0.0.1)
 `);
 }
 

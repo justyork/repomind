@@ -31,8 +31,8 @@ describe('list_docs', () => {
 
   beforeEach(() => {
     repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/adr/one.md', 'type: adr\nslug: one\nstatus: accepted\ntitle: One\ntags:\n  - core');
-    writeDoc(repo, '.project-knowledge/specs/two.md', 'type: feature-spec\nslug: two\nstatus: draft\ntitle: Two');
+    writeDoc(repo, 'docs/adr/one.md', 'type: adr\nslug: one\nstatus: accepted\ntitle: One\ntags:\n  - core');
+    writeDoc(repo, 'docs/specs/two.md', 'type: feature-spec\nslug: two\nstatus: draft\ntitle: Two');
     index = new DocIndex(repo);
   });
 

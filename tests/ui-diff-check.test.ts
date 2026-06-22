@@ -38,7 +38,7 @@ describe('collectCheckReport', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
-      '.project-knowledge/adr/broken.md',
+      'docs/adr/broken.md',
       `---
 type: adr
 slug: broken
@@ -59,7 +59,7 @@ related:
 describe('computeDraftDiff', () => {
   it('marks new drafts with + lines', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/base.md', '---\ntype: glossary-term\nslug: base\nstatus: accepted\n---\n');
+    writeDoc(repo, 'docs/glossary/base.md', '---\ntype: glossary-term\nslug: base\nstatus: accepted\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
     const draft = db.create({
@@ -79,7 +79,7 @@ describe('computeDraftDiff', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
-      '.project-knowledge/glossary/existing.md',
+      'docs/glossary/existing.md',
       `---
 type: glossary-term
 slug: existing

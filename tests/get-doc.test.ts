@@ -25,7 +25,7 @@ describe('get_doc', () => {
 
   beforeEach(() => {
     repo = makeTempDir();
-    const filePath = path.join(repo, '.project-knowledge/adr/decision.md');
+    const filePath = path.join(repo, 'docs/adr/decision.md');
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(
       filePath,

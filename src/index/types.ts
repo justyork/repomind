@@ -4,6 +4,7 @@ export const DOC_TYPES = [
   'glossary-term',
   'open-question',
   'agent-instruction',
+  'wiki-page',
 ] as const;
 
 export type DocType = (typeof DOC_TYPES)[number];
@@ -23,6 +24,7 @@ export const TYPE_TO_DIR: Record<DocType, string> = {
   'glossary-term': 'glossary',
   'open-question': 'open-questions',
   'agent-instruction': 'agents',
+  'wiki-page': 'wiki',
 };
 
 export const DIR_TO_TYPE: Record<string, DocType> = {
@@ -31,6 +33,7 @@ export const DIR_TO_TYPE: Record<string, DocType> = {
   glossary: 'glossary-term',
   'open-questions': 'open-question',
   agents: 'agent-instruction',
+  wiki: 'wiki-page',
 };
 
 export interface DocFrontmatter {
@@ -46,6 +49,7 @@ export interface DocFrontmatter {
 
 export interface DocRecord {
   path: string;
+  relativePath: string;
   slug: string;
   type: DocType;
   status: DocStatus;
@@ -54,6 +58,8 @@ export interface DocRecord {
   related: string[];
   body: string;
   frontmatter: DocFrontmatter;
+  /** True when the file has explicit RepoMind frontmatter (type field). */
+  prepared: boolean;
 }
 
 export function isDocType(value: unknown): value is DocType {

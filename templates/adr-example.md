@@ -17,7 +17,7 @@ We need a format that humans and agents can read without special tooling.
 
 ## Decision
 
-Store all project knowledge as Markdown files with YAML frontmatter under `.project-knowledge/`.
+Store all project knowledge as Markdown files with YAML frontmatter under `docs/`.
 
 ## Consequences
 

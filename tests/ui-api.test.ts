@@ -26,7 +26,7 @@ function writeDoc(root: string, relativePath: string, content: string): void {
 function fixtureKnowledge(root: string): void {
   writeDoc(
     root,
-    '.project-knowledge/glossary/caravan.md',
+    'docs/glossary/caravan.md',
     `---
 type: glossary-term
 slug: caravan
@@ -42,7 +42,7 @@ A group of vehicles traveling together.
   );
   writeDoc(
     root,
-    '.project-knowledge/specs/convoy-rules.md',
+    'docs/specs/convoy-rules.md',
     `---
 type: feature-spec
 slug: convoy-rules
@@ -98,7 +98,7 @@ describe('computeKnowledgeStats', () => {
     fixtureKnowledge(repo);
     writeDoc(
       repo,
-      '.project-knowledge/adr/broken.md',
+      'docs/adr/broken.md',
       `---
 type: adr
 slug: broken
@@ -159,7 +159,7 @@ describe('UI HTTP API', () => {
     fixtureKnowledge(repo);
     writeDoc(
       repo,
-      '.project-knowledge/adr/broken.md',
+      'docs/adr/broken.md',
       `---
 type: adr
 slug: broken

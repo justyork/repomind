@@ -29,7 +29,7 @@ afterEach(() => {
 describe('DraftsDb', () => {
   it('creates and lists active drafts', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/term.md', '---\ntype: glossary-term\nslug: term\nstatus: draft\n---\n');
+    writeDoc(repo, 'docs/glossary/term.md', '---\ntype: glossary-term\nslug: term\nstatus: draft\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
 
@@ -42,7 +42,7 @@ describe('DraftsDb', () => {
 
   it('rejects duplicate active slug', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
+    writeDoc(repo, 'docs/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
     db.create({ slug: 'dup', type: 'glossary-term' });
@@ -52,7 +52,7 @@ describe('DraftsDb', () => {
 
   it('updates draft fields', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
+    writeDoc(repo, 'docs/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
     const draft = db.create({ slug: 'edit-me', type: 'glossary-term', body: 'v1' });
@@ -66,7 +66,7 @@ describe('DraftsDb', () => {
 describe('publishDraft', () => {
   it('writes markdown file for new draft', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/base.md', '---\ntype: glossary-term\nslug: base\nstatus: accepted\n---\n');
+    writeDoc(repo, 'docs/glossary/base.md', '---\ntype: glossary-term\nslug: base\nstatus: accepted\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
 
@@ -95,7 +95,7 @@ describe('publishDraft', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
-      '.project-knowledge/glossary/forked.md',
+      'docs/glossary/forked.md',
       '---\ntype: glossary-term\nslug: forked\nstatus: accepted\ntitle: Old\n---\nOld body',
     );
     const index = new DocIndex(repo);
@@ -112,7 +112,7 @@ describe('publishDraft', () => {
     expect(validateDraftForPublish(index, draft)).toBeNull();
     publishDraft(index, draft);
     const content = fs.readFileSync(
-      path.join(repo, '.project-knowledge/glossary/forked.md'),
+      path.join(repo, 'docs/glossary/forked.md'),
       'utf8',
     );
     expect(content).toContain('New body');
@@ -122,7 +122,7 @@ describe('publishDraft', () => {
 
   it('blocks publish when related slug missing', () => {
     const repo = makeTempDir();
-    writeDoc(repo, '.project-knowledge/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
+    writeDoc(repo, 'docs/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
     const index = new DocIndex(repo);
     const db = openDraftsDb(index.getKnowledgeRoot()!);
 

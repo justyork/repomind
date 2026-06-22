@@ -1,0 +1,112 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import matter from 'gray-matter';
+import type { DocIndex } from '../index/doc-index.js';
+import { isValidSlug, slugFromRelativePath } from '../index/slug.js';
+import { DIR_TO_TYPE, isDocType, type DocStatus, type DocType } from '../index/types.js';
+
+export interface UnpreparedFile {
+  relativePath: string;
+  path: string;
+  suggestedType: DocType;
+  suggestedSlug: string;
+  suggestedTitle: string;
+}
+
+export interface PrepareOptions {
+  type?: DocType;
+  slug?: string;
+  title?: string;
+  status?: DocStatus;
+}
+
+export interface PrepareResult {
+  path: string;
+  relativePath: string;
+  slug: string;
+  type: DocType;
+}
+
+function inferTypeFromRelative(relative: string): DocType {
+  const [typeDir] = relative.split('/');
+  return DIR_TO_TYPE[typeDir ?? ''] ?? 'wiki-page';
+}
+
+function titleFromSlug(slug: string): string {
+  return slug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+export function listUnpreparedFiles(index: DocIndex): UnpreparedFile[] {
+  return index.listUnprepared().map((doc) => ({
+    relativePath: doc.relativePath,
+    path: doc.path,
+    suggestedType: doc.type,
+    suggestedSlug: doc.slug,
+    suggestedTitle: doc.title,
+  }));
+}
+
+export function prepareDocFile(
+  index: DocIndex,
+  relativePath: string,
+  options: PrepareOptions = {},
+): PrepareResult {
+  const knowledgeRoot = index.getKnowledgeRoot();
+  if (!knowledgeRoot) {
+    throw new Error('no docs/ directory found');
+  }
+
+  const normalized = relativePath.replace(/\\/g, '/').replace(/^\.\//, '');
+  const absolutePath = path.resolve(knowledgeRoot, normalized);
+  const rootWithSep = knowledgeRoot.endsWith(path.sep)
+    ? knowledgeRoot
+    : `${knowledgeRoot}${path.sep}`;
+
+  if (!absolutePath.startsWith(rootWithSep) || !fs.existsSync(absolutePath)) {
+    throw new Error(`file not found: ${relativePath}`);
+  }
+
+  const raw = fs.readFileSync(absolutePath, 'utf8');
+  const parsed = matter(raw);
+  const data = parsed.data as Record<string, unknown>;
+
+  if (typeof data.type === 'string' && isDocType(data.type)) {
+    throw new Error(`file already prepared: ${relativePath}`);
+  }
+
+  const inferredType = options.type ?? inferTypeFromRelative(normalized);
+  const slug =
+    options.slug ??
+    (typeof data.slug === 'string' && isValidSlug(data.slug)
+      ? data.slug
+      : slugFromRelativePath(normalized));
+  const title =
+    options.title ??
+    (typeof data.title === 'string' ? data.title : titleFromSlug(slug));
+  const status = options.status ?? 'accepted';
+
+  const frontmatter = {
+    type: inferredType,
+    slug,
+    status,
+    title,
+    tags: Array.isArray(data.tags)
+      ? data.tags.filter((item): item is string => typeof item === 'string')
+      : [],
+    related: Array.isArray(data.related)
+      ? data.related.filter((item): item is string => typeof item === 'string')
+      : [],
+    updated: new Date().toISOString().slice(0, 10),
+  };
+
+  const markdown = matter.stringify(parsed.content, frontmatter);
+  fs.writeFileSync(absolutePath, markdown, 'utf8');
+  index.refresh();
+
+  return {
+    path: absolutePath,
+    relativePath: normalized,
+    slug,
+    type: inferredType,
+  };
+}

@@ -4,7 +4,7 @@ import path from 'node:path';
 
 const MCP_SERVER_NAME = 'repo-mind';
 const CLAUDE_SNIPPET =
-  '\n<!-- repo-mind -->\nPrefer repo-mind `search_docs` / `get_doc` over reading docs/ directly.\n<!-- /repo-mind -->\n';
+  '\n<!-- repo-mind -->\nProject knowledge lives in `docs/`. Use repo-mind MCP (`search_docs`, `get_doc`, `get_glossary_term`) — the same files humans edit in `repo-mind ui`.\n<!-- /repo-mind -->\n';
 
 export interface SetupOptions {
   cwd?: string;

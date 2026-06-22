@@ -15,7 +15,7 @@ function makeTempDir(): string {
 
 function writeDoc(root: string, slug: string, title: string, body: string, tags: string[] = []): void {
   const tagLines = tags.length > 0 ? `tags:\n${tags.map((t) => `  - ${t}`).join('\n')}` : '';
-  const filePath = path.join(root, '.project-knowledge/glossary', `${slug}.md`);
+  const filePath = path.join(root, 'docs/glossary', `${slug}.md`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(
     filePath,

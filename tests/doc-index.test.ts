@@ -30,13 +30,13 @@ afterEach(() => {
 });
 
 describe('discoverKnowledgeRoot', () => {
-  it('walks up to find .project-knowledge/', () => {
+  it('walks up to find docs/', () => {
     const repo = makeTempDir();
     const subdir = path.join(repo, 'packages', 'app');
     fs.mkdirSync(subdir, { recursive: true });
-    writeDoc(repo, '.project-knowledge/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
+    writeDoc(repo, 'docs/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');
 
-    expect(discoverKnowledgeRoot(subdir)).toBe(path.join(repo, '.project-knowledge'));
+    expect(discoverKnowledgeRoot(subdir)).toBe(path.join(repo, 'docs'));
   });
 
   it('returns null when not found', () => {
@@ -46,7 +46,7 @@ describe('discoverKnowledgeRoot', () => {
 });
 
 describe('slug safety (A1)', () => {
-  const knowledgeRoot = '/tmp/repo/.project-knowledge';
+  const knowledgeRoot = '/tmp/repo/docs';
 
   const adversarial = ['../x', 'a/../../b', '..%2f..', '/abs', '', 'has/slash', 'UPPER'];
 
@@ -68,7 +68,7 @@ describe('DocIndex cache', () => {
     repo = makeTempDir();
     writeDoc(
       repo,
-      '.project-knowledge/glossary/alpha.md',
+      'docs/glossary/alpha.md',
       `---
 type: glossary-term
 slug: alpha
@@ -90,7 +90,7 @@ First paragraph.`,
     const index = new DocIndex(repo);
     index.refresh();
 
-    const docPath = path.join(repo, '.project-knowledge/glossary/alpha.md');
+    const docPath = path.join(repo, 'docs/glossary/alpha.md');
     const original = fs.readFileSync(docPath, 'utf8');
     fs.writeFileSync(
       docPath,

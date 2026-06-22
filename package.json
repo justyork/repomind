@@ -1,7 +1,7 @@
 {
   "name": "repo-mind",
-  "version": "0.1.1",
-  "description": "MCP-first project memory layer for AI-assisted development",
+  "version": "0.1.2",
+  "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {
     "repo-mind": "dist/cli.js"

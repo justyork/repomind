@@ -14,7 +14,7 @@ export function runCheck(options: CheckOptions = {}): number {
   const report = collectCheckReport(index);
 
   if (!report) {
-    console.error('no .project-knowledge/ found — run `repo-mind init`');
+    console.error('no docs/ found — run `repo-mind init` or create a docs/ directory');
     return 1;
   }
 

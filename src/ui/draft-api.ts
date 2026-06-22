@@ -3,6 +3,7 @@ import type { DocIndex } from '../index/doc-index.js';
 import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
+import { prepareDocFile } from '../prepare/prepare-docs.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { computeDraftDiff } from './diff.js';
@@ -41,7 +42,7 @@ function stringArray(value: unknown): string[] | undefined {
 
 export function handleDraftApi(
   index: DocIndex,
-  db: DraftsDb,
+  db: DraftsDb | undefined,
   method: string,
   pathname: string,
   bodyRaw: string,
@@ -52,6 +53,50 @@ export function handleDraftApi(
       return jsonError(500, 'export failed');
     }
     return { status: 200, body: { ok: true, path: 'agents.md' } };
+  }
+
+  if (pathname === '/api/prepare' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const relativePath = typeof body.path === 'string' ? body.path : '';
+    if (!relativePath.trim()) {
+      return jsonError(400, 'path is required');
+    }
+    const typeParam = typeof body.type === 'string' ? body.type : undefined;
+    if (typeParam && !isDocType(typeParam)) {
+      return jsonError(400, `invalid type — expected one of: ${DOC_TYPES.join(', ')}`);
+    }
+    const slugParam = typeof body.slug === 'string' ? body.slug : undefined;
+    if (slugParam && !isValidSlug(slugParam)) {
+      return jsonError(400, `invalid slug: ${slugParam}`);
+    }
+    const statusParam = typeof body.status === 'string' ? body.status : undefined;
+    if (statusParam && !isDocStatus(statusParam)) {
+      return jsonError(400, `invalid status: ${statusParam}`);
+    }
+    const titleParam = typeof body.title === 'string' ? body.title : undefined;
+
+    try {
+      const result = prepareDocFile(index, relativePath, {
+        type: typeParam && isDocType(typeParam) ? typeParam : undefined,
+        slug: slugParam,
+        title: titleParam,
+        status: statusParam && isDocStatus(statusParam) ? statusParam : undefined,
+      });
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (!db) {
+    if (pathname.startsWith('/api/drafts')) {
+      return jsonError(503, 'drafts database unavailable');
+    }
+    return null;
   }
 
   if (!pathname.startsWith('/api/drafts')) {

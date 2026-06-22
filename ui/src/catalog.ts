@@ -1,6 +1,7 @@
 import type { ListDocsItem } from './api.js';
 
 export const CATALOG_ORDER = [
+  'wiki-page',
   'adr',
   'feature-spec',
   'glossary-term',
@@ -9,6 +10,7 @@ export const CATALOG_ORDER = [
 ] as const;
 
 export const CATALOG_LABELS: Record<string, string> = {
+  'wiki-page': 'Wiki',
   adr: 'ADR',
   'feature-spec': 'Feature specs',
   'glossary-term': 'Glossary',
@@ -17,6 +19,7 @@ export const CATALOG_LABELS: Record<string, string> = {
 };
 
 export const CATALOG_ICON_LETTERS: Record<string, string> = {
+  'wiki-page': 'W',
   adr: 'A',
   'feature-spec': 'S',
   'glossary-term': 'G',

@@ -2,17 +2,23 @@
 
 ## 1. Суть продукта
 
-Система для хранения, редактирования и использования проектных знаний прямо внутри репозитория.
+**Единая база знаний проекта в `docs/` внутри репозитория** — wiki, архитектура, ADR, стек, glossary, правила для агентов. Confluence и Notion не нужны: всё версионируется через Git, лежит рядом с кодом.
+
+RepoMind — **обёртка** вокруг этой документации:
+
+* **Люди** — Confluence-подобный локальный UI: каталог, поиск, граф, редактор, publish;
+* **AI-агенты** — те же файлы через MCP (`search_docs`, `get_doc`, …).
+
+Один источник истины, два интерфейса. Черновики в SQLite не видны агентам до Publish.
 
 Главная цель — создать единое пространство знаний проекта, которое удобно:
 
-* читать разработчикам;
-* редактировать через UI;
+* читать и редактировать разработчикам (без лабиринта разделов Confluence);
 * версионировать через Git;
-* использовать AI-агентам через MCP / tools / индекс;
+* использовать AI-агентам через MCP;
 * переносить между проектами одной командой.
 
-Это не просто документация. Это **AI-ready project memory layer**.
+Это не просто папка markdown. Это **repo-native knowledge workspace** с опциональной структурой (frontmatter, типы, связи).
 
 Важно, что система должна хранить не только техническую документацию, но и любые знания, являющиеся источником истины для проекта.
 
@@ -75,36 +81,33 @@ RepoMind предоставляет инфраструктуру для таки
 
 ## 3. Цель
 
-Создать стандартный слой проектных знаний внутри репозитория:
+Создать **единую базу знаний в `docs/`** внутри репозитория:
 
 ```text
-.project-knowledge/
-  docs/
-  features/
-  architecture/
-  decisions/
-  agents/
-  workflows/
+docs/
+  README.md
+  adr/
+  specs/
   glossary/
-  game-design/
-  lore/
-  economy/
-  assets/
+  agents/
   open-questions/
-  exports/
-  config.yaml
+  wiki/              # произвольные wiki-страницы
+  architecture/      # legacy markdown → Prepare добавит frontmatter
+  .repo-mind/        # SQLite черновики (gitignored)
 ```
+
+RepoMind не заменяет `docs/` — он **оборачивает** её: UI для людей, MCP для агентов, Prepare для миграции существующего markdown.
 
 Система должна позволять:
 
-1. Инициализировать пространство одной командой.
-2. Редактировать знания через локальный web UI.
-3. Хранить рабочие изменения в SQLite.
-4. Публиковать утвержденные изменения в репозиторий.
-5. Давать AI-агентам доступ через MCP.
-6. Генерировать AI-friendly представления знаний.
-7. Строить связи между документами и сущностями проекта.
-8. Поддерживать совместную работу людей и AI над базой знаний.
+1. Инициализировать `docs/` одной командой (`repo-mind init`).
+2. Редактировать знания через локальный web UI (Confluence-like).
+3. Рекурсивно находить markdown без frontmatter и подготовить под схему (Prepare).
+4. Хранить рабочие изменения в SQLite (drafts).
+5. Публиковать утверждённые изменения в `docs/*.md`.
+6. Давать AI-агентам доступ к **тем же файлам** через MCP.
+7. Строить связи между документами (`related:`).
+8. Поддерживать совместную работу людей и AI над одной базой.
 
 ---
 
@@ -156,11 +159,8 @@ SQLite используется как рабочее хранилище.
 Пример:
 
 ```text
-.project-knowledge/.state/
-  knowledge.db
-  search-index.db
-  graph.db
-  drafts/
+docs/.repo-mind/
+  drafts.db
   cache/
 ```
 
@@ -184,22 +184,19 @@ SQLite не обязан попадать в Git.
 Пример:
 
 ```text
-.project-knowledge/
+docs/
   architecture/
-    system-overview.mdx
-  decisions/
+    system-overview.md
+  adr/
     ADR-0001-use-sqlite-draft-layer.md
-  features/
-    expedition-system.mdx
-  game-design/
-    combat-system.mdx
-  lore/
-    factions.mdx
+  specs/
+    expedition-system.md
+  wiki/
+    factions.md
   agents/
-    vulkan.md
-    ava.md
+    query-first.md
   glossary/
-    terms.yaml
+    caravan.md
 ```
 
 ---

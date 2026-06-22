@@ -9,6 +9,7 @@ const TYPE_SECTIONS: Record<DocType, string> = {
   'glossary-term': 'Glossary',
   'open-question': 'Open Questions',
   'agent-instruction': 'Agent Instructions',
+  'wiki-page': 'Wiki',
 };
 
 export interface ExportOptions {
@@ -22,7 +23,7 @@ export function runExport(options: ExportOptions = {}): number {
   const knowledgeRoot = index.getKnowledgeRoot();
 
   if (!knowledgeRoot) {
-    console.error('no .project-knowledge/ found — run `repo-mind init`');
+    console.error('no docs/ found — run `repo-mind init` or create a docs/ directory');
     return 1;
   }
 

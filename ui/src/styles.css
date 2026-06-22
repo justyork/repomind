@@ -998,6 +998,12 @@ select {
   margin-top: 0;
 }
 
+.dashboard-hint {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
 .check-status {
   font-size: 0.95rem;
   margin: 0 0 0.75rem;

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
+import { isValidSlug, slugFromRelativePath } from './slug.js';
 import {
   DIR_TO_TYPE,
   type DocFrontmatter,
@@ -12,7 +13,10 @@ import {
   isDocType,
 } from './types.js';
 
-export const KNOWLEDGE_DIR = '.project-knowledge';
+/** Primary project knowledge directory — single source of truth for humans and agents. */
+export const KNOWLEDGE_DIR = 'docs';
+
+const GLOB_IGNORE = ['**/.repo-mind/**', '**/.worktrees/**'];
 
 interface CacheEntry {
   mtimeMs: number;
@@ -43,24 +47,40 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
+function inferTypeFromRelative(relative: string): DocType {
+  const [typeDir] = relative.split(path.sep);
+  return DIR_TO_TYPE[typeDir ?? ''] ?? 'wiki-page';
+}
+
+function inferSlug(relative: string, data: Record<string, unknown>, inferredType: DocType): string {
+  if (typeof data.slug === 'string' && isValidSlug(data.slug)) {
+    return data.slug;
+  }
+
+  const basename = path.basename(relative, '.md');
+  if (inferredType !== 'wiki-page' && isValidSlug(basename)) {
+    return basename;
+  }
+
+  return slugFromRelativePath(relative);
+}
+
 function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
   const raw = fs.readFileSync(filePath, 'utf8');
   const parsed = matter(raw);
   const data = parsed.data as Record<string, unknown>;
 
   const relative = path.relative(knowledgeRoot, filePath);
-  const [typeDir] = relative.split(path.sep);
-  const inferredType = DIR_TO_TYPE[typeDir];
-
+  const inferredType = inferTypeFromRelative(relative);
   const type = isDocType(data.type) ? data.type : inferredType;
-  const slugFromFile = path.basename(filePath, '.md');
-  const slug = typeof data.slug === 'string' ? data.slug : slugFromFile;
-  const status: DocStatus = isDocStatus(data.status) ? data.status : 'draft';
-  const title = typeof data.title === 'string' ? data.title : slug;
+  const slug = inferSlug(relative, data, type);
+  const status: DocStatus = isDocStatus(data.status) ? data.status : 'accepted';
+  const title =
+    typeof data.title === 'string'
+      ? data.title
+      : slug.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
 
-  if (!type) {
-    return null;
-  }
+  const prepared = typeof data.type === 'string' && isDocType(data.type);
 
   const frontmatter: DocFrontmatter = {
     type,
@@ -75,6 +95,7 @@ function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
 
   return {
     path: filePath,
+    relativePath: relative.replace(/\\/g, '/'),
     slug,
     type,
     status,
@@ -83,7 +104,17 @@ function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
     related: frontmatter.related ?? [],
     body: parsed.content.trim(),
     frontmatter,
+    prepared,
   };
+}
+
+export function listMarkdownFiles(knowledgeRoot: string): string[] {
+  const pattern = path.join(knowledgeRoot, '**/*.md').replace(/\\/g, '/');
+  return fg.sync(pattern, {
+    absolute: true,
+    onlyFiles: true,
+    ignore: GLOB_IGNORE,
+  });
 }
 
 export class DocIndex {
@@ -111,13 +142,7 @@ export class DocIndex {
       return [];
     }
 
-    const pattern = path.join(this.knowledgeRoot, '**/*.md').replace(/\\/g, '/');
-    const files = fg.sync(pattern, {
-      absolute: true,
-      onlyFiles: true,
-      ignore: ['**/README.md'],
-    });
-
+    const files = listMarkdownFiles(this.knowledgeRoot);
     const seen = new Set<string>();
 
     for (const filePath of files) {
@@ -162,6 +187,11 @@ export class DocIndex {
   getDocsByType(type: DocType): DocRecord[] {
     this.refresh();
     return this.getDocs().filter((doc) => doc.type === type);
+  }
+
+  listUnprepared(): DocRecord[] {
+    this.refresh();
+    return this.getDocs().filter((doc) => !doc.prepared);
   }
 }
 

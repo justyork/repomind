@@ -1,6 +1,6 @@
 # RepoMind — project instructions for AI agents
 
-Read this file first. RepoMind is an open-source MCP server that gives coding agents queryable access to project knowledge stored in `.project-knowledge/` inside the repository.
+Read this file first. RepoMind is an open-source tool that wraps the project's **`docs/` directory** — unified knowledge for humans (Web UI) and agents (MCP). Published markdown in `docs/` is the single source of truth.
 
 ## Project context
 
@@ -61,5 +61,5 @@ Key routing rules:
 | L | Multi-day — cross-cutting, new subsystem |
 
 <!-- repo-mind -->
-Prefer repo-mind `search_docs` / `get_doc` over reading docs/ directly.
+Project knowledge lives in `docs/`. Use repo-mind MCP (`search_docs`, `get_doc`, `get_glossary_term`) — the same files humans edit in `repo-mind ui`.
 <!-- /repo-mind -->

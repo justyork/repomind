@@ -4,6 +4,7 @@ import { collectCheckReport } from '../check/collect-violations.js';
 import type { DocIndex } from '../index/doc-index.js';
 import { isValidSlug } from '../index/slug.js';
 import { isDocStatus, isDocType } from '../index/types.js';
+import { listUnpreparedFiles, prepareDocFile } from '../prepare/prepare-docs.js';
 import { exploreGraph } from '../tools/explore-graph.js';
 import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
@@ -96,9 +97,13 @@ export function handleApiRequest(
   if (pathname === '/api/check') {
     const report = collectCheckReport(index);
     if (!report) {
-      return jsonError(404, 'no .project-knowledge/ found');
+      return jsonError(404, 'no docs/ directory found');
     }
     return { status: 200, body: report };
+  }
+
+  if (pathname === '/api/unprepared') {
+    return { status: 200, body: { files: listUnpreparedFiles(index) } };
   }
 
   const graphMatch = pathname.match(/^\/api\/graph\/([^/]+)$/);

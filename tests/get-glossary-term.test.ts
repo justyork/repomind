@@ -21,7 +21,7 @@ function writeGlossary(
   related: string[] = [],
 ): void {
   const relatedLines = related.length > 0 ? `related:\n${related.map((r) => `  - ${r}`).join('\n')}` : '';
-  const filePath = path.join(root, '.project-knowledge/glossary', `${slug}.md`);
+  const filePath = path.join(root, 'docs/glossary', `${slug}.md`);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(
     filePath,

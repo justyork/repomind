@@ -118,13 +118,13 @@ export function createUiServer(options: UiServerOptions): http.Server {
           }
         }
 
-        if (draftsDb) {
-          const draftResponse = handleDraftApi(index, draftsDb, method, urlPath, bodyRaw);
-          if (draftResponse) {
-            sendJson(res, draftResponse.status, draftResponse.body);
-            return;
-          }
-        } else if (urlPath.startsWith('/api/drafts')) {
+        const draftResponse = handleDraftApi(index, draftsDb, method, urlPath, bodyRaw);
+        if (draftResponse) {
+          sendJson(res, draftResponse.status, draftResponse.body);
+          return;
+        }
+
+        if (urlPath.startsWith('/api/drafts')) {
           sendJson(res, 503, { error: 'drafts database unavailable' });
           return;
         }

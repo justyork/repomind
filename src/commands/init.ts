@@ -1,14 +1,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { KNOWLEDGE_DIR } from '../index/doc-index.js';
 import { TYPE_TO_DIR } from '../index/types.js';
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
 );
-
-const KNOWLEDGE_DIR = '.project-knowledge';
 
 const SUBDIRS = Object.values(TYPE_TO_DIR);
 
@@ -21,11 +20,14 @@ const TEMPLATE_FILES: Array<{ template: string; target: string }> = [
   { template: 'combat-system-example.md', target: 'specs/combat-system.md' },
 ];
 
-const KNOWLEDGE_README = `# Project Knowledge
+const KNOWLEDGE_README = `# Project documentation
 
-This directory holds structured project knowledge for AI agents and humans.
+This \`docs/\` directory is the single source of truth for project knowledge — wiki, architecture, ADR, specs, glossary, and agent rules.
 
-Each document is Markdown with YAML frontmatter. Run \`npx repo-mind check\` to validate schema and links.
+Humans edit via \`repo-mind ui\`; agents query the same files via MCP (\`search_docs\`, \`get_doc\`).
+
+Each structured page uses Markdown with YAML frontmatter. Run \`npx repo-mind check\` to validate schema and links.
+Existing markdown without frontmatter is indexed as wiki pages — use the UI **Prepare** flow to add frontmatter.
 `;
 
 const KNOWLEDGE_GITIGNORE = `.worktrees/

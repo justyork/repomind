@@ -1,5 +1,5 @@
 import type { CheckReport, Draft } from './api.js';
-import { exportAgentsMd, getCheckReport, listDrafts, publishDraftApi } from './api.js';
+import { exportAgentsMd, getCheckReport, listDrafts, listUnprepared, prepareDoc, publishDraftApi } from './api.js';
 
 export interface DashboardCallbacks {
   onOpenDraft: (draft: Draft) => void;
@@ -22,12 +22,18 @@ export function renderDashboard(
     </div>
     <div id="dash-check" class="dashboard-section"></div>
     <div class="dashboard-section">
+      <h2>Prepare docs</h2>
+      <p class="dashboard-hint">Markdown files without RepoMind frontmatter. Add frontmatter to index them for MCP and the catalog.</p>
+      <ul id="dash-unprepared" class="queue-list"></ul>
+    </div>
+    <div class="dashboard-section">
       <h2>Publish queue</h2>
       <ul id="dash-queue" class="queue-list"></ul>
     </div>
   `;
 
   const checkEl = container.querySelector<HTMLElement>('#dash-check')!;
+  const unpreparedEl = container.querySelector<HTMLUListElement>('#dash-unprepared')!;
   const queueEl = container.querySelector<HTMLUListElement>('#dash-queue')!;
 
   function renderCheck(report: CheckReport): void {
@@ -55,6 +61,41 @@ export function renderDashboard(
     }
 
     checkEl.innerHTML = html;
+  }
+
+  function renderUnprepared(files: Awaited<ReturnType<typeof listUnprepared>>['files']): void {
+    unpreparedEl.innerHTML = '';
+    if (files.length === 0) {
+      unpreparedEl.innerHTML = '<li class="placeholder">All docs have frontmatter</li>';
+      return;
+    }
+
+    for (const file of files) {
+      const li = document.createElement('li');
+      li.className = 'queue-item';
+      li.innerHTML = `
+        <div class="queue-main">
+          <div class="queue-title">${escapeHtml(file.relativePath)}</div>
+          <div class="meta">${escapeHtml(file.suggestedType)} · slug: ${escapeHtml(file.suggestedSlug)}</div>
+        </div>
+        <div class="queue-actions">
+          <button type="button" class="btn-primary btn-sm" data-action="prepare">Add frontmatter</button>
+        </div>
+      `;
+
+      li.querySelector('[data-action="prepare"]')?.addEventListener('click', () => {
+        void prepareDoc(file.relativePath, file.suggestedType)
+          .then(({ result }) => {
+            callbacks.onNotify(`Prepared: ${result.slug}`);
+            void refresh();
+          })
+          .catch((err: unknown) => {
+            callbacks.onNotify(err instanceof Error ? err.message : 'Prepare failed', true);
+          });
+      });
+
+      unpreparedEl.appendChild(li);
+    }
   }
 
   function renderQueue(drafts: Draft[]): void {
@@ -99,8 +140,13 @@ export function renderDashboard(
 
   async function refresh(): Promise<void> {
     try {
-      const [report, { drafts }] = await Promise.all([getCheckReport(), listDrafts()]);
+      const [report, { drafts }, { files }] = await Promise.all([
+        getCheckReport(),
+        listDrafts(),
+        listUnprepared(),
+      ]);
       renderCheck(report);
+      renderUnprepared(files);
       renderQueue(drafts);
     } catch (err) {
       checkEl.innerHTML = `<p class="check-status check-fail">${escapeHtml(err instanceof Error ? err.message : 'Failed to load')}</p>`;

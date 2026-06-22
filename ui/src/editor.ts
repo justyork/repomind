@@ -171,7 +171,7 @@ export function renderDraftEditor(
       openPublishModal();
       const target = container.querySelector<HTMLElement>('#publish-target')!;
       const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
-      target.textContent = `.project-knowledge/.../${slugEl.value}.md`;
+      target.textContent = `docs/.../${slugEl.value}.md`;
       diffEl.textContent = 'Loading diff…';
 
       try {

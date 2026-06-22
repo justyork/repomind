@@ -160,3 +160,23 @@ export function getDraftDiff(id: string): Promise<DraftDiffResult> {
 export function exportAgentsMd(): Promise<{ ok: boolean; path: string }> {
   return fetchJson('/api/export', { method: 'POST' });
 }
+
+export interface UnpreparedFile {
+  relativePath: string;
+  path: string;
+  suggestedType: string;
+  suggestedSlug: string;
+  suggestedTitle: string;
+}
+
+export function listUnprepared(): Promise<{ files: UnpreparedFile[] }> {
+  return fetchJson('/api/unprepared');
+}
+
+export function prepareDoc(path: string, type?: string): Promise<{ result: { slug: string; path: string } }> {
+  return fetchJson('/api/prepare', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, type }),
+  });
+}
