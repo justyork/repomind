@@ -7,6 +7,8 @@
   --muted: #626f86;
   --accent: #0c66e4;
   --accent-subtle: #e9f2ff;
+  --link: #0c66e4;
+  --link-hover: #0055cc;
   --table-stripe: #fafbfc;
   --table-header: #f4f5f7;
   --shadow: rgba(9, 30, 66, 0.15);
@@ -22,6 +24,8 @@
   --muted: #8b9cb3;
   --accent: #5b9fd4;
   --accent-subtle: rgba(91, 159, 212, 0.15);
+  --link: #9ec5f0;
+  --link-hover: #c2dbf7;
   --table-stripe: rgba(255, 255, 255, 0.03);
   --table-header: #1a2332;
   --shadow: rgba(0, 0, 0, 0.45);
@@ -391,13 +395,14 @@ body {
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--panel);
-  color: var(--accent);
+  color: var(--link);
   cursor: pointer;
   font-size: 0.8rem;
 }
 
 .related-chip:hover {
-  border-color: var(--accent);
+  border-color: var(--link);
+  color: var(--link-hover);
 }
 
 h2 {
@@ -1018,6 +1023,33 @@ select {
   background: var(--accent-subtle);
 }
 
+.tree-create-menu button.tree-menu-danger {
+  color: #c0392b;
+}
+
+.tree-create-menu button.tree-menu-danger:hover {
+  background: rgba(192, 57, 43, 0.12);
+}
+
+.link-health-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.link-health-stat {
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.link-health-value {
+  display: block;
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .tree-menu {
   width: 1.5rem;
   height: 1.5rem;
@@ -1173,7 +1205,7 @@ select {
 }
 
 .crumb:hover {
-  color: var(--accent);
+  color: var(--link);
   text-decoration: underline;
 }
 
@@ -1234,14 +1266,28 @@ select {
   margin-left: 0.25rem;
 }
 
+.markdown-preview a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent);
+  text-underline-offset: 2px;
+}
+
+.markdown-preview a:hover {
+  color: var(--link-hover);
+  text-decoration-color: var(--link-hover);
+}
+
 .markdown-preview a.wikilink {
-  color: var(--accent);
+  color: var(--link);
   text-decoration: none;
-  border-bottom: 1px dashed var(--accent);
+  border-bottom: 1px dashed color-mix(in srgb, var(--link) 65%, transparent);
 }
 
 .markdown-preview a.wikilink:hover {
-  text-decoration: underline;
+  color: var(--link-hover);
+  border-bottom-color: var(--link-hover);
+  text-decoration: none;
 }
 
 .page-content {

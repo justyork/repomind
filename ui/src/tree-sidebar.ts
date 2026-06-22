@@ -1,10 +1,13 @@
 import {
   createFsFolder,
   createFsPage,
+  deleteFsNode,
+  listTemplates,
   moveFsPage,
   renameFsPage,
   setCatalogEmoji,
   type Draft,
+  type PageTemplate,
   type TreeFolderNode,
   type TreeNode,
   type TreePageNode,
@@ -15,6 +18,7 @@ export interface TreeSidebarCallbacks {
   onSelectSlug: (slug: string) => void;
   onSelectDraft?: (draft: Draft) => void;
   onTreeChanged?: () => void;
+  onFsDeleted?: (deletedSlugs: string[]) => void;
   onError?: (message: string) => void;
 }
 
@@ -48,25 +52,109 @@ function pageIcon(type: string): string {
   return letter.length === 1 ? letter : '📄';
 }
 
-function showCreateMenu(
-  anchor: HTMLElement,
+function closeTreeMenus(): void {
+  document.querySelectorAll('.tree-context-menu').forEach((menu) => menu.remove());
+}
+
+function collectFolderPaths(node: TreeFolderNode): string[] {
+  const paths: string[] = [node.relativePath];
+  for (const child of node.children ?? []) {
+    if (child.kind === 'folder') {
+      paths.push(...collectFolderPaths(child));
+    }
+  }
+  return paths;
+}
+
+function promptPageName(): string | null {
+  const name = window.prompt('Page name (without .md):');
+  return name?.trim() ? name.trim() : null;
+}
+
+function createPage(
   parentPath: string,
-  isFolder: boolean,
+  name: string,
+  templateId: string | undefined,
   callbacks: TreeSidebarCallbacks,
 ): void {
-  document.querySelector('.tree-create-menu')?.remove();
+  void createFsPage(parentPath, name, undefined, templateId)
+    .then(({ draft }) => {
+      callbacks.onTreeChanged?.();
+      callbacks.onSelectDraft?.(draft);
+    })
+    .catch((err: unknown) => {
+      callbacks.onError?.(err instanceof Error ? err.message : 'Create page failed');
+    });
+}
+
+function showContextMenu(
+  anchor: HTMLElement,
+  options: {
+    kind: 'page' | 'folder';
+    parentPath: string;
+    folderPath: string;
+    page?: TreePageNode;
+    tree: TreeFolderNode;
+    templates: PageTemplate[];
+  },
+  callbacks: TreeSidebarCallbacks,
+): void {
+  closeTreeMenus();
+
+  const { kind, parentPath, folderPath, page, tree, templates } = options;
+  const moveTargets =
+    kind === 'page' && page
+      ? collectFolderPaths(tree).filter((path) => {
+          const pageParent = page.relativePath.includes('/')
+            ? page.relativePath.slice(0, page.relativePath.lastIndexOf('/'))
+            : '';
+          return path !== pageParent;
+        })
+      : [];
 
   const menu = document.createElement('div');
-  menu.className = 'tree-create-menu';
+  menu.className = 'tree-create-menu tree-context-menu';
   menu.innerHTML = `
+    <div class="tree-menu-label">Create</div>
     <button type="button" data-action="page">New page</button>
+    ${templates
+      .map(
+        (template) =>
+          `<button type="button" data-action="template" data-template="${escapeAttr(template.id)}">From template: ${escapeHtml(template.label)}</button>`,
+      )
+      .join('')}
     <button type="button" data-action="folder">New folder</button>
-    ${isFolder ? '<button type="button" data-action="emoji">Set emoji</button>' : ''}
+    ${
+      kind === 'folder' && folderPath
+        ? '<button type="button" data-action="emoji">Set emoji</button>'
+        : ''
+    }
+    ${
+      kind === 'page' && page
+        ? `
+      <div class="tree-menu-label">Page</div>
+      <button type="button" data-action="rename">Rename…</button>
+      ${moveTargets.length > 0 ? '<div class="tree-menu-label">Move to</div>' : ''}
+      ${moveTargets
+        .map(
+          (folder) =>
+            `<button type="button" data-action="move" data-folder="${escapeAttr(folder)}">${escapeHtml(folder || '(root)')}</button>`,
+        )
+        .join('')}
+      <button type="button" data-action="delete-page" class="tree-menu-danger">Delete page</button>
+    `
+        : ''
+    }
+    ${
+      kind === 'folder' && folderPath
+        ? '<button type="button" data-action="delete-folder" class="tree-menu-danger">Delete folder</button>'
+        : ''
+    }
   `;
 
   const rect = anchor.getBoundingClientRect();
   menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${Math.max(8, rect.left - 120)}px`;
+  menu.style.left = `${Math.max(8, rect.left - 160)}px`;
   document.body.appendChild(menu);
 
   const close = () => menu.remove();
@@ -80,18 +168,22 @@ function showCreateMenu(
 
   menu.querySelector('[data-action="page"]')?.addEventListener('click', () => {
     close();
-    const name = window.prompt('Page name (without .md):');
-    if (!name?.trim()) {
+    const name = promptPageName();
+    if (!name) {
       return;
     }
-    void createFsPage(parentPath, name.trim())
-      .then(({ draft }) => {
-        callbacks.onTreeChanged?.();
-        callbacks.onSelectDraft?.(draft);
-      })
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Create page failed');
-      });
+    createPage(parentPath, name, undefined, callbacks);
+  });
+
+  menu.querySelectorAll<HTMLButtonElement>('[data-action="template"]').forEach((button) => {
+    button.addEventListener('click', () => {
+      close();
+      const name = promptPageName();
+      if (!name) {
+        return;
+      }
+      createPage(parentPath, name, button.dataset.template, callbacks);
+    });
   });
 
   menu.querySelector('[data-action="folder"]')?.addEventListener('click', () => {
@@ -113,66 +205,18 @@ function showCreateMenu(
     if (emoji === null) {
       return;
     }
-    void setCatalogEmoji(parentPath, emoji)
+    void setCatalogEmoji(folderPath, emoji)
       .then(() => callbacks.onTreeChanged?.())
       .catch((err: unknown) => {
         callbacks.onError?.(err instanceof Error ? err.message : 'Set emoji failed');
       });
   });
-}
-
-function collectFolderPaths(node: TreeFolderNode): string[] {
-  const paths: string[] = [node.relativePath];
-  for (const child of node.children ?? []) {
-    if (child.kind === 'folder') {
-      paths.push(...collectFolderPaths(child));
-    }
-  }
-  return paths;
-}
-
-function showPageMenu(
-  anchor: HTMLElement,
-  page: TreePageNode,
-  tree: TreeFolderNode,
-  callbacks: TreeSidebarCallbacks,
-): void {
-  document.querySelector('.tree-page-menu')?.remove();
-
-  const parentPath = page.relativePath.includes('/')
-    ? page.relativePath.slice(0, page.relativePath.lastIndexOf('/'))
-    : '';
-  const folders = collectFolderPaths(tree).filter((path) => path !== parentPath);
-
-  const menu = document.createElement('div');
-  menu.className = 'tree-create-menu tree-page-menu';
-  menu.innerHTML = `
-    <button type="button" data-action="rename">Rename…</button>
-    ${folders.length > 0 ? '<div class="tree-menu-label">Move to</div>' : ''}
-    ${folders
-      .map(
-        (folder) =>
-          `<button type="button" data-action="move" data-folder="${escapeAttr(folder)}">${escapeHtml(folder || '(root)')}</button>`,
-      )
-      .join('')}
-  `;
-
-  const rect = anchor.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${Math.max(8, rect.left - 120)}px`;
-  document.body.appendChild(menu);
-
-  const close = () => menu.remove();
-  const onDocClick = (event: MouseEvent) => {
-    if (!menu.contains(event.target as Node)) {
-      close();
-      document.removeEventListener('click', onDocClick);
-    }
-  };
-  setTimeout(() => document.addEventListener('click', onDocClick), 0);
 
   menu.querySelector('[data-action="rename"]')?.addEventListener('click', () => {
     close();
+    if (!page) {
+      return;
+    }
     const currentName = page.relativePath.split('/').pop()?.replace(/\.md$/, '') ?? page.name;
     const newName = window.prompt('New page name (without .md):', currentName);
     if (!newName?.trim() || newName.trim() === currentName) {
@@ -196,6 +240,9 @@ function showPageMenu(
   menu.querySelectorAll<HTMLButtonElement>('[data-action="move"]').forEach((button) => {
     button.addEventListener('click', () => {
       close();
+      if (!page) {
+        return;
+      }
       const toDir = button.dataset.folder ?? '';
       void moveFsPage(page.relativePath, toDir)
         .then(({ result }) => {
@@ -211,6 +258,52 @@ function showPageMenu(
           callbacks.onError?.(err instanceof Error ? err.message : 'Move failed');
         });
     });
+  });
+
+  menu.querySelector('[data-action="delete-page"]')?.addEventListener('click', () => {
+    close();
+    if (!page) {
+      return;
+    }
+    if (!window.confirm(`Delete page "${page.title}"?`)) {
+      return;
+    }
+    void deleteFsNode(page.relativePath, 'page')
+      .then(({ result }) => {
+        callbacks.onFsDeleted?.([result.slug]);
+        callbacks.onTreeChanged?.();
+        if (result.inboundWarnings.length > 0) {
+          callbacks.onError?.(
+            `${result.inboundWarnings.length} page(s) still link to deleted slug "${result.slug}".`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        callbacks.onError?.(err instanceof Error ? err.message : 'Delete failed');
+      });
+  });
+
+  menu.querySelector('[data-action="delete-folder"]')?.addEventListener('click', () => {
+    close();
+    if (!folderPath) {
+      return;
+    }
+    if (!window.confirm(`Delete folder "${folderPath}" and all pages inside?`)) {
+      return;
+    }
+    void deleteFsNode(folderPath, 'folder')
+      .then(({ result }) => {
+        callbacks.onFsDeleted?.(result.deletedSlugs);
+        callbacks.onTreeChanged?.();
+        if (result.inboundWarnings.length > 0) {
+          callbacks.onError?.(
+            `${result.inboundWarnings.length} page(s) still link to deleted page(s).`,
+          );
+        }
+      })
+      .catch((err: unknown) => {
+        callbacks.onError?.(err instanceof Error ? err.message : 'Delete folder failed');
+      });
   });
 }
 
@@ -236,9 +329,24 @@ export function renderTreeSidebar(
   const treeEl = container.querySelector<HTMLElement>('#docs-tree')!;
   const draftListEl = container.querySelector<HTMLUListElement>('#draft-list')!;
   const expanded = loadExpanded();
+  let templatesCache: PageTemplate[] | null = null;
 
   let activeSlug: string | null = null;
   let activeDraftId: string | null = null;
+
+  async function openMenu(
+    anchor: HTMLElement,
+    options: Omit<Parameters<typeof showContextMenu>[1], 'templates'>,
+  ): Promise<void> {
+    try {
+      if (!templatesCache) {
+        templatesCache = (await listTemplates()).templates;
+      }
+      showContextMenu(anchor, { ...options, templates: templatesCache }, callbacks);
+    } catch (err: unknown) {
+      callbacks.onError?.(err instanceof Error ? err.message : 'Failed to open menu');
+    }
+  }
 
   function renderPageRow(node: TreeNode & { kind: 'page' }, depth: number): HTMLElement {
     const row = document.createElement('div');
@@ -253,8 +361,7 @@ export function renderTreeSidebar(
         <span class="tree-icon tree-icon--page">${pageIcon(node.type)}</span>
         <span class="tree-title">${escapeHtml(node.title)}</span>
       </button>
-      <button type="button" class="tree-add" title="Create here">+</button>
-      <button type="button" class="tree-menu" title="Page actions">⋯</button>
+      <button type="button" class="tree-menu" title="Actions">⋯</button>
     `;
     const parentPath = node.relativePath.includes('/')
       ? node.relativePath.slice(0, node.relativePath.lastIndexOf('/'))
@@ -262,7 +369,13 @@ export function renderTreeSidebar(
 
     row.querySelector('.tree-menu')?.addEventListener('click', (event) => {
       event.stopPropagation();
-      showPageMenu(event.currentTarget as HTMLElement, node, tree, callbacks);
+      void openMenu(event.currentTarget as HTMLElement, {
+        kind: 'page',
+        parentPath,
+        folderPath: parentPath,
+        page: node,
+        tree,
+      });
     });
 
     row.querySelector('.tree-label')?.addEventListener('click', () => {
@@ -271,10 +384,6 @@ export function renderTreeSidebar(
       renderTree();
       renderDrafts();
       callbacks.onSelectSlug(node.slug);
-    });
-    row.querySelector('.tree-add')?.addEventListener('click', (event) => {
-      event.stopPropagation();
-      showCreateMenu(event.currentTarget as HTMLElement, parentPath, false, callbacks);
     });
     return row;
   }
@@ -292,7 +401,7 @@ export function renderTreeSidebar(
         <span class="tree-icon tree-icon--folder">${folderIcon(node)}</span>
         <span class="tree-title">${escapeHtml(node.name)}</span>
       </button>
-      <button type="button" class="tree-add" title="Create here">+</button>
+      <button type="button" class="tree-menu" title="Actions">⋯</button>
     `;
 
     row.querySelector('.tree-toggle')?.addEventListener('click', (event) => {
@@ -324,9 +433,14 @@ export function renderTreeSidebar(
       renderTree();
     });
 
-    row.querySelector('.tree-add')?.addEventListener('click', (event) => {
+    row.querySelector('.tree-menu')?.addEventListener('click', (event) => {
       event.stopPropagation();
-      showCreateMenu(event.currentTarget as HTMLElement, node.relativePath, true, callbacks);
+      void openMenu(event.currentTarget as HTMLElement, {
+        kind: 'folder',
+        parentPath: node.relativePath,
+        folderPath: node.relativePath,
+        tree,
+      });
     });
 
     block.appendChild(row);
@@ -420,6 +534,7 @@ export function renderTreeSidebar(
     tree.children = nextTree.children ?? [];
     tree.emoji = nextTree.emoji;
     tree.indexPageSlug = nextTree.indexPageSlug;
+    tree.name = nextTree.name;
     drafts.length = 0;
     drafts.push(...(nextDrafts ?? []));
     renderTree();

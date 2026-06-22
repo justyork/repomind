@@ -1,4 +1,4 @@
-import type { IncomingMessage } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
 import { collectCheckReport } from '../check/collect-violations.js';
 import type { DocIndex } from '../index/doc-index.js';
@@ -14,10 +14,12 @@ import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
 import { searchDocs } from '../tools/search-docs.js';
+import type { DocsWatcher } from './docs-watcher.js';
 import { ALL_GRAPH_SLUG, exploreGraphAll } from './graph-all.js';
 import { buildDocsTree } from './fs-tree.js';
 import { readCatalogMeta } from './catalog-meta.js';
 import { computeKnowledgeStats } from './stats.js';
+import { listPageTemplates } from './templates.js';
 
 export interface ApiResponse {
   status: number;
@@ -114,6 +116,10 @@ export function handleApiRequest(
       return jsonError(404, 'no docs/ directory found');
     }
     return { status: 200, body: { tree, catalogMeta: readCatalogMeta(index.getKnowledgeRoot()!) } };
+  }
+
+  if (pathname === '/api/templates') {
+    return { status: 200, body: { templates: listPageTemplates() } };
   }
 
   if (pathname === '/api/link-health') {
@@ -213,4 +219,38 @@ export function routeApi(index: DocIndex, req: IncomingMessage): ApiResponse | n
     return null;
   }
   return handleApiRequest(index, req, url.pathname, url.searchParams);
+}
+
+export function handleDocsEvents(
+  req: IncomingMessage,
+  res: ServerResponse,
+  docsWatcher: DocsWatcher | undefined,
+): void {
+  if ((req.method ?? 'GET') !== 'GET') {
+    res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'method not allowed' }));
+    return;
+  }
+
+  if (!docsWatcher) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'docs watcher unavailable' }));
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const sendRevision = (revision: number): void => {
+    res.write(`data: ${JSON.stringify({ revision })}\n\n`);
+  };
+
+  sendRevision(docsWatcher.getRevision());
+  const unsubscribe = docsWatcher.subscribe(sendRevision);
+  req.on('close', () => {
+    unsubscribe();
+  });
 }

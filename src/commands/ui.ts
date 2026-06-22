@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
+import { DocsWatcher } from '../ui/docs-watcher.js';
 import { openDraftsDb } from '../ui/db/drafts-db.js';
 import { resolveUiStaticDir, startUiServer } from '../ui/server.js';
 
@@ -29,12 +30,15 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
 
   try {
     const draftsDb = openDraftsDb(index.getKnowledgeRoot()!);
+    const docsWatcher = new DocsWatcher(index);
+    docsWatcher.start(index.getKnowledgeRoot()!);
     const server = await startUiServer({
       host: '127.0.0.1',
       port,
       index,
       staticDir,
       draftsDb,
+      docsWatcher,
     });
 
     const docCount = index.refresh().length;
@@ -46,8 +50,10 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
 
     await new Promise<void>((resolve) => {
       const shutdown = () => {
-        draftsDb.close();
-        server.close(() => resolve());
+        void docsWatcher.stop().finally(() => {
+          draftsDb.close();
+          server.close(() => resolve());
+        });
       };
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);

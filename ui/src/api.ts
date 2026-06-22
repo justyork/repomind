@@ -131,7 +131,9 @@ export function getBacklinks(slug: string): Promise<{ slug: string; backlinks: B
 
 export function getLinkHealth(): Promise<{
   orphanCount: number;
+  orphanSlugs: string[];
   brokenCount: number;
+  brokenTargets: string[];
   oneWayCount: number;
 }> {
   return fetchJson('/api/link-health');
@@ -157,11 +159,12 @@ export function createFsPage(
   parentPath: string,
   name: string,
   title?: string,
+  templateId?: string,
 ): Promise<{ page: { slug: string; relativePath: string }; draft: Draft }> {
   return fetchJson('/api/fs/page', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ parentPath, name, title }),
+    body: JSON.stringify({ parentPath, name, title, templateId }),
   });
 }
 
@@ -193,6 +196,40 @@ export function renameFsPage(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: pagePath, newName }),
   });
+}
+
+export interface FsDeletePageResult {
+  relativePath: string;
+  slug: string;
+  inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export interface FsDeleteFolderResult {
+  relativePath: string;
+  deletedSlugs: string[];
+  inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export function deleteFsNode(
+  path: string,
+  kind: 'page' | 'folder',
+): Promise<{ result: FsDeletePageResult | FsDeleteFolderResult }> {
+  return fetchJson('/api/fs/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, kind }),
+  });
+}
+
+export interface PageTemplate {
+  id: string;
+  label: string;
+  type: string;
+  filename: string;
+}
+
+export function listTemplates(): Promise<{ templates: PageTemplate[] }> {
+  return fetchJson('/api/templates');
 }
 
 export function setCatalogEmoji(folderPath: string, emoji: string): Promise<{ meta: Record<string, string> }> {

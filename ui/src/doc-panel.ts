@@ -11,9 +11,13 @@ const FOCUS_STORAGE_KEY = 'repomind-page-info-hidden';
 
 function loadFocusMode(): boolean {
   try {
-    return localStorage.getItem(FOCUS_STORAGE_KEY) === 'true';
+    const raw = localStorage.getItem(FOCUS_STORAGE_KEY);
+    if (raw === null) {
+      return true;
+    }
+    return raw === 'true';
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -69,7 +73,7 @@ export function renderDocPanel(
           <h1 class="doc-title">${escapeHtml(title)}</h1>
           <div class="workspace-actions">
             <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
-              ${focusMode ? 'Show info' : 'Focus'}
+              ${focusMode ? 'Show info' : 'Hide info'}
             </button>
             <button type="button" id="edit-page" class="btn-primary">Edit</button>
             <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
@@ -147,7 +151,7 @@ export function renderDocPanel(
     saveFocusMode(next);
     if (btn) {
       btn.setAttribute('aria-pressed', String(next));
-      btn.textContent = next ? 'Show info' : 'Focus';
+      btn.textContent = next ? 'Show info' : 'Hide info';
     }
   });
 

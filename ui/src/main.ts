@@ -17,6 +17,7 @@ import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
 import { bindThemeToggle, initTheme } from './theme.js';
 import { renderTreeSidebar } from './tree-sidebar.js';
+import { subscribeDocsReload } from './live-reload.js';
 
 initTheme();
 
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
   const searchDropdown = document.querySelector<HTMLElement>('#search-dropdown')!;
 
   let docs: ListDocsItem[] = [];
+  let currentSlug: string | null = null;
   let viewMode: 'workspace' | 'dashboard' = 'workspace';
   let dashboardRefresh: (() => Promise<void>) | null = null;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -187,7 +189,7 @@ async function main(): Promise<void> {
         })();
       },
       onError: (message) => showToast(message, true),
-    }, docIndex);
+    }, docs);
   }
 
   async function startEdit(slug: string): Promise<void> {
@@ -205,6 +207,7 @@ async function main(): Promise<void> {
       setViewMode('workspace');
     }
 
+    currentSlug = slug;
     sidebarEl.setActiveSlug?.(slug);
 
     try {
@@ -246,7 +249,36 @@ async function main(): Promise<void> {
           await refreshStats();
         })();
       },
+      onFsDeleted: (deletedSlugs) => {
+        void (async () => {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          if (currentSlug && deletedSlugs.includes(currentSlug)) {
+            currentSlug = null;
+            renderDocPanel(workspaceEl, null);
+          }
+          await reloadTree(sidebarEl);
+          await refreshStats();
+        })();
+      },
       onError: (message) => showToast(message, true),
+    });
+
+    subscribeDocsReload(() => {
+      void (async () => {
+        try {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          await reloadTree(sidebarEl);
+          await refreshStats();
+          if (currentSlug && !docs.some((doc) => doc.slug === currentSlug)) {
+            currentSlug = null;
+            renderDocPanel(workspaceEl, null);
+          }
+        } catch {
+          // ignore transient reload errors
+        }
+      })();
     });
 
     renderDocPanel(workspaceEl, null);

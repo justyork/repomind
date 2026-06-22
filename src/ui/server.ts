@@ -3,7 +3,8 @@ import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DocIndex } from '../index/doc-index.js';
-import { routeApi } from './api-handlers.js';
+import { routeApi, handleDocsEvents } from './api-handlers.js';
+import type { DocsWatcher } from './docs-watcher.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { handleDraftApi } from './draft-api.js';
 
@@ -13,6 +14,7 @@ export interface UiServerOptions {
   index: DocIndex;
   staticDir: string;
   draftsDb?: DraftsDb;
+  docsWatcher?: DocsWatcher;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -99,7 +101,7 @@ function serveStatic(
 
 export function createUiServer(options: UiServerOptions): http.Server {
   const host = options.host ?? '127.0.0.1';
-  const { staticDir, index, draftsDb } = options;
+  const { staticDir, index, draftsDb, docsWatcher } = options;
 
   return http.createServer((req, res) => {
     void (async () => {
@@ -107,6 +109,11 @@ export function createUiServer(options: UiServerOptions): http.Server {
       const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
 
       if (urlPath.startsWith('/api/')) {
+        if (urlPath === '/api/events' && method === 'GET') {
+          handleDocsEvents(req, res, docsWatcher);
+          return;
+        }
+
         let bodyRaw = '';
         if (method === 'POST' || method === 'PUT' || method === 'DELETE') {
           try {

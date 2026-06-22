@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DocIndex } from '../src/index/doc-index.ts';
-import { movePageFile, renamePageFile } from '../src/ui/fs-operations.ts';
+import { movePageFile, renamePageFile, deletePageFile, deleteFolder } from '../src/ui/fs-operations.ts';
 
 const tmpRoots: string[] = [];
 
@@ -87,5 +87,48 @@ Body.
     expect(fs.existsSync(path.join(repo, 'docs/specs/new-name.md'))).toBe(true);
     expect(index.getDocBySlug(result.slug)).toBeTruthy();
     expect(result.slug).toBe('specs-new-name');
+  });
+
+  it('deletes a page and a folder', () => {
+    const repo = makeTempDir();
+    writeDoc(
+      repo,
+      'docs/specs/to-delete.md',
+      `---
+type: feature-spec
+slug: to-delete
+status: draft
+title: To Delete
+---
+`,
+    );
+    fs.mkdirSync(path.join(repo, 'docs/archive'), { recursive: true });
+    writeDoc(
+      repo,
+      'docs/archive/old.md',
+      `---
+type: wiki-page
+slug: archive-old
+status: draft
+title: Old
+---
+`,
+    );
+
+    const index = new DocIndex(repo);
+    const pageResult = deletePageFile(index, 'specs/to-delete.md');
+    expect(pageResult.slug).toBe('to-delete');
+    expect(fs.existsSync(path.join(repo, 'docs/specs/to-delete.md'))).toBe(false);
+
+    const folderResult = deleteFolder(index, 'archive');
+    expect(folderResult.deletedSlugs).toContain('archive-old');
+    expect(fs.existsSync(path.join(repo, 'docs/archive'))).toBe(false);
+  });
+
+  it('rejects deleting docs root', () => {
+    const repo = makeTempDir();
+    writeDoc(repo, 'docs/root.md', '---\ntype: wiki-page\nslug: root\nstatus: draft\ntitle: Root\n---\n');
+    const index = new DocIndex(repo);
+    expect(() => deleteFolder(index, '')).toThrow(/cannot delete docs root/);
   });
 });

@@ -7,6 +7,7 @@ import { slugFromRelativePath } from '../index/slug.js';
 import type { DocType } from '../index/types.js';
 import { DIR_TO_TYPE } from '../index/types.js';
 import { buildLinkIndexForDocs } from '../tools/explore-graph.js';
+import { readPageTemplate } from './templates.js';
 import {
   isValidFsName,
   joinRelativePath,
@@ -35,6 +36,23 @@ export interface FsPageMutationResult {
   previousSlug: string;
   slugChanged: boolean;
   inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export interface FsDeletePageResult {
+  relativePath: string;
+  slug: string;
+  inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export interface FsDeleteFolderResult {
+  relativePath: string;
+  deletedSlugs: string[];
+  inboundWarnings: Array<{ slug: string; title: string }>;
+}
+
+export interface CreatePageOptions {
+  title?: string;
+  templateId?: string;
 }
 
 function inferTypeFromParent(parentPath: string): DocType {
@@ -72,7 +90,7 @@ export function createPageFile(
   index: DocIndex,
   parentPath: string,
   name: string,
-  title?: string,
+  options: CreatePageOptions = {},
 ): CreatePageResult {
   const knowledgeRoot = index.getKnowledgeRoot();
   if (!knowledgeRoot) {
@@ -95,19 +113,30 @@ export function createPageFile(
 
   const type = inferTypeFromParent(parentPath);
   const slug = slugFromRelativePath(relativePath);
-  const pageTitle = title?.trim() || baseName.replace(/[-_]/g, ' ');
+  const pageTitle = options.title?.trim() || baseName.replace(/[-_]/g, ' ');
+
+  let body = `# ${pageTitle}\n\n`;
+  if (options.templateId) {
+    const template = readPageTemplate(options.templateId);
+    body = template.body || body;
+    if (!options.title?.trim() && template.title) {
+      options.title = template.title;
+    }
+  }
+
+  const resolvedTitle = options.title?.trim() || pageTitle;
   const frontmatter = {
     type,
     slug,
     status: 'draft',
-    title: pageTitle,
+    title: resolvedTitle,
     tags: [],
     related: [],
     updated: new Date().toISOString().slice(0, 10),
   };
 
   fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
-  fs.writeFileSync(absolutePath, matter.stringify(`# ${pageTitle}\n\n`, frontmatter), 'utf8');
+  fs.writeFileSync(absolutePath, matter.stringify(body, frontmatter), 'utf8');
   index.refresh();
 
   return {
@@ -261,5 +290,103 @@ export function renamePageFile(
     previousSlug,
     slugChanged: newSlug !== previousSlug,
     inboundWarnings: previousSlug !== newSlug ? inboundWarnings : [],
+  };
+}
+
+function listMarkdownFilesRecursive(absoluteDir: string): string[] {
+  const files: string[] = [];
+  if (!fs.existsSync(absoluteDir)) {
+    return files;
+  }
+
+  for (const entry of fs.readdirSync(absoluteDir, { withFileTypes: true })) {
+    if (entry.name === '.repo-mind' || entry.name === '.worktrees') {
+      continue;
+    }
+    const fullPath = path.join(absoluteDir, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...listMarkdownFilesRecursive(fullPath));
+    } else if (entry.isFile() && entry.name.toLowerCase().endsWith('.md')) {
+      files.push(fullPath);
+    }
+  }
+
+  return files;
+}
+
+function mergeInboundWarnings(
+  lists: Array<Array<{ slug: string; title: string }>>,
+): Array<{ slug: string; title: string }> {
+  const seen = new Set<string>();
+  const merged: Array<{ slug: string; title: string }> = [];
+  for (const list of lists) {
+    for (const item of list) {
+      if (seen.has(item.slug)) {
+        continue;
+      }
+      seen.add(item.slug);
+      merged.push(item);
+    }
+  }
+  return merged;
+}
+
+export function deletePageFile(index: DocIndex, pagePath: string): FsDeletePageResult {
+  const knowledgeRoot = index.getKnowledgeRoot();
+  if (!knowledgeRoot) {
+    throw new Error('no docs/ directory found');
+  }
+
+  const normalized = normalizeRelativePath(pagePath);
+  const absolutePath = resolveRelativeMdPath(knowledgeRoot, normalized);
+  if (!absolutePath || !fs.existsSync(absolutePath)) {
+    throw new Error(`page not found: ${pagePath}`);
+  }
+
+  const slug = readPageSlug(absolutePath);
+  const inboundWarnings = collectInboundWarnings(index, slug);
+
+  fs.unlinkSync(absolutePath);
+  index.refresh();
+
+  return {
+    relativePath: normalized,
+    slug,
+    inboundWarnings,
+  };
+}
+
+export function deleteFolder(index: DocIndex, folderPath: string): FsDeleteFolderResult {
+  const knowledgeRoot = index.getKnowledgeRoot();
+  if (!knowledgeRoot) {
+    throw new Error('no docs/ directory found');
+  }
+
+  const normalized = normalizeRelativePath(folderPath);
+  if (!normalized) {
+    throw new Error('cannot delete docs root');
+  }
+
+  const absolutePath = resolveUnderKnowledgeRoot(knowledgeRoot, normalized);
+  if (!absolutePath || !fs.existsSync(absolutePath)) {
+    throw new Error(`folder not found: ${folderPath}`);
+  }
+  if (!fs.statSync(absolutePath).isDirectory()) {
+    throw new Error(`not a folder: ${folderPath}`);
+  }
+
+  const markdownFiles = listMarkdownFilesRecursive(absolutePath);
+  const deletedSlugs = markdownFiles.map((filePath) => readPageSlug(filePath));
+  const inboundWarnings = mergeInboundWarnings(
+    deletedSlugs.map((slug) => collectInboundWarnings(index, slug)),
+  );
+
+  fs.rmSync(absolutePath, { recursive: true, force: true });
+  index.refresh();
+
+  return {
+    relativePath: normalized,
+    deletedSlugs,
+    inboundWarnings,
   };
 }

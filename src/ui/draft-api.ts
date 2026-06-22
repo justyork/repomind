@@ -4,7 +4,8 @@ import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
-import { createFolder, createPageFile, movePageFile, renamePageFile } from './fs-operations.js';
+import { createFolder, createPageFile, deleteFolder, deletePageFile, movePageFile, renamePageFile } from './fs-operations.js';
+import { listPageTemplates } from './templates.js';
 import { prepareDocFile } from '../prepare/prepare-docs.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
@@ -96,11 +97,12 @@ export function handleDraftApi(
     const parentPath = typeof body.parentPath === 'string' ? body.parentPath : '';
     const name = typeof body.name === 'string' ? body.name : '';
     const title = typeof body.title === 'string' ? body.title : undefined;
+    const templateId = typeof body.templateId === 'string' ? body.templateId : undefined;
     if (!db) {
       return jsonError(503, 'drafts database unavailable');
     }
     try {
-      const page = createPageFile(index, parentPath, name, title);
+      const page = createPageFile(index, parentPath, name, { title, templateId });
       const existing = db.getActiveBySlug(page.slug);
       if (existing) {
         return { status: 200, body: { page, draft: existing } };
@@ -153,6 +155,26 @@ export function handleDraftApi(
     const newName = typeof body.newName === 'string' ? body.newName : '';
     try {
       const result = renamePageFile(index, pagePath, newName);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/delete' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const targetPath = typeof body.path === 'string' ? body.path : '';
+    const kind = body.kind === 'folder' ? 'folder' : body.kind === 'page' ? 'page' : null;
+    if (!kind) {
+      return jsonError(400, 'kind must be "page" or "folder"');
+    }
+    try {
+      const result =
+        kind === 'page' ? deletePageFile(index, targetPath) : deleteFolder(index, targetPath);
       return { status: 200, body: { result } };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
