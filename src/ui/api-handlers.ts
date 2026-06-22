@@ -203,6 +203,7 @@ export function handleApiRequest(
         found: true,
         slug: doc.slug,
         path: doc.path,
+        contentKind: doc.contentKind,
         frontmatter: doc.frontmatter,
         body: doc.body,
         agentShape,
@@ -219,6 +220,18 @@ export function routeApi(index: DocIndex, req: IncomingMessage): ApiResponse | n
     return null;
   }
   return handleApiRequest(index, req, url.pathname, url.searchParams);
+}
+
+const docsEventClients = new Set<ServerResponse>();
+
+/** Closes live SSE streams so `server.close()` can finish during shutdown. */
+export function closeAllDocsEventStreams(): void {
+  for (const res of docsEventClients) {
+    if (!res.writableEnded) {
+      res.end();
+    }
+  }
+  docsEventClients.clear();
 }
 
 export function handleDocsEvents(
@@ -250,7 +263,9 @@ export function handleDocsEvents(
 
   sendRevision(docsWatcher.getRevision());
   const unsubscribe = docsWatcher.subscribe(sendRevision);
+  docsEventClients.add(res);
   req.on('close', () => {
     unsubscribe();
+    docsEventClients.delete(res);
   });
 }

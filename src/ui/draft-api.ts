@@ -6,7 +6,8 @@ import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
 import { createFolder, createPageFile, deleteFolder, deletePageFile, movePageFile, renamePageFile } from './fs-operations.js';
 import { listPageTemplates } from './templates.js';
-import { prepareDocFile } from '../prepare/prepare-docs.js';
+import { prepareDocFile, prepareAllDocs } from '../prepare/prepare-docs.js';
+import { syncAllDocLinks } from '../prepare/auto-links.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { computeDraftDiff } from './diff.js';
@@ -256,6 +257,28 @@ export function handleDraftApi(
       const message = error instanceof Error ? error.message : String(error);
       return jsonError(400, message);
     }
+  }
+
+  if (pathname === '/api/prepare-all' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    const dryRun = body !== null && body.dryRun === true;
+    const result = prepareAllDocs(index, { dryRun });
+    return { status: 200, body: { result, dryRun } };
+  }
+
+  if (pathname === '/api/sync-links' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    const dryRun = body !== null && body.dryRun === true;
+    const convertMarkdownLinks =
+      body === null || body.convertBody === undefined ? true : body.convertBody === true;
+    const syncRelated =
+      body === null || body.syncRelated === undefined ? true : body.syncRelated === true;
+    const result = syncAllDocLinks(index, {
+      dryRun,
+      convertMarkdownLinks,
+      syncRelated,
+    });
+    return { status: 200, body: { result, dryRun } };
   }
 
   if (!db) {

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import http from 'node:http';
+import type { Socket } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DocIndex } from '../index/doc-index.js';
@@ -188,6 +189,7 @@ export function resolveUiStaticDir(): string {
 export function startUiServer(options: UiServerOptions): Promise<http.Server> {
   const host = options.host ?? '127.0.0.1';
   const server = createUiServer(options);
+  attachActiveConnectionTracking(server);
 
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -196,4 +198,31 @@ export function startUiServer(options: UiServerOptions): Promise<http.Server> {
       resolve(server);
     });
   });
+}
+
+const activeSockets = new WeakMap<http.Server, Set<Socket>>();
+
+function attachActiveConnectionTracking(server: http.Server): void {
+  const sockets = new Set<Socket>();
+  activeSockets.set(server, sockets);
+  server.on('connection', (socket) => {
+    sockets.add(socket);
+    socket.on('close', () => {
+      sockets.delete(socket);
+    });
+  });
+}
+
+/** Destroys open HTTP connections (including SSE) so shutdown can complete. */
+export function destroyUiServerConnections(server: http.Server): void {
+  const sockets = activeSockets.get(server);
+  if (sockets) {
+    for (const socket of sockets) {
+      socket.destroy();
+    }
+    sockets.clear();
+  }
+  if (typeof server.closeAllConnections === 'function') {
+    server.closeAllConnections();
+  }
 }

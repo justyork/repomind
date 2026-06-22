@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
+import { isKnowledgeFileName } from '../index/knowledge-file.js';
 import type { LinkEdge } from '../index/link-index.js';
 import { catalogEmoji, readCatalogMeta } from './catalog-meta.js';
 import { joinRelativePath, normalizeRelativePath } from './safe-path.js';
@@ -15,6 +16,7 @@ export interface TreePageNode {
   title: string;
   status: string;
   type: string;
+  contentKind: 'markdown' | 'yaml' | 'json';
 }
 
 export interface TreeFolderNode {
@@ -22,7 +24,7 @@ export interface TreeFolderNode {
   name: string;
   relativePath: string;
   emoji: string | null;
-  /** Slug of sibling index page (e.g. architecture.md for architecture/ folder). */
+  /** Slug of README.md index page for this folder. */
   indexPageSlug: string | null;
   children: TreeNode[];
 }
@@ -30,8 +32,15 @@ export interface TreeFolderNode {
 export type TreeNode = TreePageNode | TreeFolderNode;
 
 interface BuildContext {
-  docsByRelative: Map<string, { slug: string; title: string; status: string; type: string }>;
+  docsByRelative: Map<
+    string,
+    { slug: string; title: string; status: string; type: string; contentKind: 'markdown' | 'yaml' | 'json' }
+  >;
   meta: Record<string, string>;
+}
+
+function knowledgeFileDisplayName(fileName: string): string {
+  return fileName.replace(/\.(md|ya?ml|json)$/i, '');
 }
 
 function listDirEntries(dirPath: string): Array<{ name: string; isDirectory: boolean }> {
@@ -44,27 +53,21 @@ function listDirEntries(dirPath: string): Array<{ name: string; isDirectory: boo
     .map((entry) => ({ name: entry.name, isDirectory: entry.isDirectory() }));
 }
 
+export function readmeIndexRelativePath(folderRelativePath: string): string {
+  const base = normalizeRelativePath(folderRelativePath);
+  return base ? `${base}/README.md` : 'README.md';
+}
+
 function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): TreeFolderNode {
   const entries = listDirEntries(absPath);
-  const folderNames = new Set(
-    entries.filter((entry) => entry.isDirectory).map((entry) => entry.name),
-  );
   const children: TreeNode[] = [];
 
-  const indexRel = relativePath ? `${relativePath}/${path.basename(relativePath)}.md` : '';
-  // index page: parent/foo.md when folder is parent/foo/
-  const folderName = path.basename(relativePath);
-  const parentRel = relativePath.includes('/')
-    ? relativePath.slice(0, relativePath.lastIndexOf('/'))
-    : '';
-  const siblingIndexRel = parentRel
-    ? `${parentRel}/${folderName}.md`
-    : `${folderName}.md`;
+  const readmeRel = readmeIndexRelativePath(relativePath);
 
   let indexPageSlug: string | null = null;
-  const indexDoc = ctx.docsByRelative.get(siblingIndexRel);
-  if (indexDoc && folderNames.has(folderName)) {
-    indexPageSlug = indexDoc.slug;
+  const readmeDoc = ctx.docsByRelative.get(readmeRel);
+  if (readmeDoc) {
+    indexPageSlug = readmeDoc.slug;
   }
 
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -77,12 +80,12 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
       continue;
     }
 
-    if (!entry.name.endsWith('.md')) {
+    if (!isKnowledgeFileName(entry.name)) {
       continue;
     }
 
     const fileRel = joinRelativePath(relativePath, entry.name);
-    if (fileRel === siblingIndexRel && folderNames.has(folderName)) {
+    if (fileRel === readmeRel && indexPageSlug) {
       continue;
     }
 
@@ -93,12 +96,13 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
 
     children.push({
       kind: 'page',
-      name: entry.name.replace(/\.md$/i, ''),
+      name: knowledgeFileDisplayName(entry.name),
       relativePath: fileRel,
       slug: doc.slug,
       title: doc.title,
       status: doc.status,
       type: doc.type,
+      contentKind: doc.contentKind,
     });
   }
 
@@ -120,7 +124,7 @@ export function buildDocsTree(index: DocIndex): TreeFolderNode | null {
 
   const docsByRelative = new Map<
     string,
-    { slug: string; title: string; status: string; type: string }
+    { slug: string; title: string; status: string; type: string; contentKind: 'markdown' | 'yaml' | 'json' }
   >();
   for (const doc of index.refresh()) {
     docsByRelative.set(doc.relativePath, {
@@ -128,6 +132,7 @@ export function buildDocsTree(index: DocIndex): TreeFolderNode | null {
       title: doc.title,
       status: doc.status,
       type: doc.type,
+      contentKind: doc.contentKind,
     });
   }
 

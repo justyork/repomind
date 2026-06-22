@@ -13,6 +13,72 @@ Humans and agents can **browse and read** common knowledge files beyond Markdown
 - Confluence tree, LinkIndex, editor, move/rename/delete, templates, link health, live reload
 - DocIndex indexes `**/*.md` only
 - UI serves static bundle only; no asset URLs under `docs/`
+- Folder index today: sibling `{folderName}.md` (Confluence-style), **not** `README.md`
+- Deep link today: `?slug=` read **only on first load**; in-app navigation does not update URL; markdown `[links](...)` to other pages do not route in UI
+
+## P0 — Navigation & index pages (quick wins)
+
+**Status:** implemented 2026-06-23 on `feat/p0-ui-4-confluence-tree`
+
+Ship before or alongside P1 — unblocks sharing and matches git/wiki conventions.
+
+### P0.1 README as folder index (always)
+
+**Rule:** every folder’s index page is `README.md` inside that folder.
+
+| Location | Index file | Tree behaviour |
+|----------|------------|----------------|
+| `docs/` | `docs/README.md` | Root folder click → open README slug |
+| `docs/specs/` | `docs/specs/README.md` | Folder click → README; README hidden from child list |
+| Legacy `{folder}/{folder}.md` | — | Deprecate as index; still listed as normal page until migrated |
+
+**Implementation sketch:**
+
+- `fs-tree.ts`: resolve `indexPageSlug` from `{relativePath}/README.md` (case-insensitive on case-sensitive FS: prefer `README.md`)
+- `parent_of` edges in LinkIndex: folder → children via README as hub (E10)
+- `init` already writes `docs/README.md` — document convention in `docs/README` template
+- Optional `check` warning: folder without `README.md` (info, not violation)
+
+**Acceptance:**
+
+- Click root **Knowledge** → opens `docs/README.md`
+- Click any folder with `README.md` → opens that README, not `{name}.md`
+
+### P0.2 Deep links in UI (shareable URLs)
+
+**Goal:** paste a URL in browser → land on the correct page; copy link from UI → works for colleagues.
+
+**URL contract (v3):**
+
+```
+http://127.0.0.1:3847/?slug=<slug>           # primary (existing param, make canonical)
+http://127.0.0.1:3847/?path=<relativePath>   # optional, for yaml/json/assets in P1+
+```
+
+**Behaviour:**
+
+| Action | Expected |
+|--------|----------|
+| Open `?slug=caravan` | Load page, tree highlights slug |
+| Click page in tree | `history.pushState` updates `?slug=` (no full reload) |
+| Browser Back/Forward | `popstate` → `selectSlug` |
+| Wikilink / related chip click | Updates URL |
+| **Copy link** on page header | Copies `origin + ?slug=` to clipboard |
+| Invalid / missing slug | Empty state + toast; no silent fallback to random doc |
+| Graph page `graph.html` | Already links to `/?slug=` — keep in sync |
+
+**Markdown link routing (in-app):**
+
+- Relative `*.md` href → resolve to slug → `selectSlug` + URL update
+- Same-origin `?slug=` href → honour param
+- External `https://` → new tab (unchanged)
+
+**Tests:**
+
+- `tests/fs-tree.test.ts` — README index resolution
+- UI/manual: navigate A → B → Back returns A; shared URL opens B
+
+**Effort:** S (~half day)
 
 ## P1 — Structured file reading (yaml, yml, json)
 
@@ -98,11 +164,13 @@ GET /api/assets/*relativePath   → file bytes from under docs/
 
 ## Acceptance (v3 done)
 
-1. Open `docs/config/settings.json` in UI — formatted readable view
-2. Open `docs/.../diagram.yaml` — readable yaml view
-3. Markdown page with `![](../assets/foo.png)` renders image in light and dark theme
-4. `repo-mind check` flags broken asset paths (stretch)
-5. MCP `get_doc` returns non-md files with correct body
+0. Root and every folder with `README.md` use it as index page
+1. Share `?slug=` URL → recipient opens same page; Back/Forward works
+2. Open `docs/config/settings.json` in UI — formatted readable view
+3. Open `docs/.../diagram.yaml` — readable yaml view
+4. Markdown page with `![](../assets/foo.png)` renders image in light and dark theme
+5. `repo-mind check` flags broken asset paths (stretch)
+6. MCP `get_doc` returns non-md files with correct body
 
 ## Out of scope
 
@@ -113,6 +181,7 @@ GET /api/assets/*relativePath   → file bytes from under docs/
 ## Suggested order
 
 ```
+Week 0   P0 README index + deep links (URL sync, copy link, md href routing)
 Week 1   P1 yaml/json index + reader
 Week 2   P2 asset serving + markdown images
 Week 3   dogfood + P3 cherry-picks as needed

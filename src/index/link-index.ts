@@ -94,6 +94,10 @@ export function buildLinkIndex(
   }
 
   for (const doc of docs) {
+    if (doc.contentKind !== 'markdown') {
+      continue;
+    }
+
     for (const related of doc.related) {
       if (related === doc.slug) {
         continue;

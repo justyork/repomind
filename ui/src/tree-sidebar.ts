@@ -47,7 +47,13 @@ function folderIcon(node: TreeFolderNode): string {
   return '📁';
 }
 
-function pageIcon(type: string): string {
+function pageIcon(type: string, contentKind?: string): string {
+  if (contentKind === 'json') {
+    return '{ }';
+  }
+  if (contentKind === 'yaml') {
+    return 'Y';
+  }
   const letter = catalogIconLetter(type);
   return letter.length === 1 ? letter : '📄';
 }
@@ -358,7 +364,7 @@ export function renderTreeSidebar(
     row.innerHTML = `
       <span class="tree-spacer" aria-hidden="true"></span>
       <button type="button" class="tree-label">
-        <span class="tree-icon tree-icon--page">${pageIcon(node.type)}</span>
+        <span class="tree-icon tree-icon--page">${pageIcon(node.type, node.contentKind)}</span>
         <span class="tree-title">${escapeHtml(node.title)}</span>
       </button>
       <button type="button" class="tree-menu" title="Actions">⋯</button>

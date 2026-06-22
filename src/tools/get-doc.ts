@@ -5,6 +5,8 @@ import type { DocFrontmatter } from '../index/types.js';
 export interface GetDocResult {
   found: boolean;
   slug?: string;
+  path?: string;
+  contentKind?: 'markdown' | 'yaml' | 'json';
   frontmatter?: DocFrontmatter;
   body?: string;
 }
@@ -26,6 +28,8 @@ export function getDoc(index: DocIndex, slug: string): GetDocResult {
   return {
     found: true,
     slug: doc.slug,
+    path: doc.path,
+    contentKind: doc.contentKind,
     frontmatter: doc.frontmatter,
     body: doc.body,
   };

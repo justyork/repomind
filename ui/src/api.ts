@@ -4,6 +4,7 @@ export interface ListDocsItem {
   title: string;
   status: string;
   relativePath: string;
+  contentKind?: 'markdown' | 'yaml' | 'json';
 }
 
 export interface SearchResult {
@@ -35,6 +36,7 @@ export interface DocDetail {
   found: boolean;
   slug?: string;
   path?: string;
+  contentKind?: 'markdown' | 'yaml' | 'json';
   frontmatter?: Record<string, unknown>;
   body?: string;
   agentShape?: unknown;
@@ -102,6 +104,7 @@ export interface TreePageNode {
   title: string;
   status: string;
   type: string;
+  contentKind: 'markdown' | 'yaml' | 'json';
 }
 
 export interface TreeFolderNode {
@@ -326,5 +329,39 @@ export function prepareDoc(path: string, type?: string): Promise<{ result: { slu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, type }),
+  });
+}
+
+export function prepareAllDocs(dryRun = false): Promise<{
+  result: { prepared: Array<{ relativePath: string; slug: string; type: string }>; skipped: Array<{ relativePath: string; reason: string }> };
+  dryRun: boolean;
+}> {
+  return fetchJson('/api/prepare-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun }),
+  });
+}
+
+export function syncAllLinks(options: {
+  dryRun?: boolean;
+  convertBody?: boolean;
+  syncRelated?: boolean;
+} = {}): Promise<{
+  result: {
+    files: Array<{
+      relativePath: string;
+      convertedLinks: number;
+      addedRelated: string[];
+      changed: boolean;
+      skipped: boolean;
+    }>;
+  };
+  dryRun: boolean;
+}> {
+  return fetchJson('/api/sync-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
   });
 }

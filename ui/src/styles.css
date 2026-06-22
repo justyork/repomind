@@ -626,7 +626,8 @@ select {
 }
 
 .agent-json,
-.frontmatter-yaml {
+.frontmatter-yaml,
+.structured-preview {
   font-family: ui-monospace, monospace;
   font-size: 0.8rem;
   white-space: pre-wrap;
@@ -635,6 +636,16 @@ select {
   padding: 0.75rem;
   border-radius: 4px;
   border: 1px solid var(--border);
+  margin: 0;
+  overflow: auto;
+}
+
+.structured-preview--json code {
+  color: var(--text);
+}
+
+.structured-preview--yaml code {
+  color: var(--text);
 }
 
 .badge {
@@ -1290,6 +1301,12 @@ select {
   text-decoration: none;
 }
 
+.markdown-preview a.md-link-unresolved {
+  color: var(--muted);
+  text-decoration: line-through;
+  cursor: not-allowed;
+}
+
 .page-content {
   min-width: 0;
 }
@@ -1471,6 +1488,13 @@ select {
   margin: 0 0 0.75rem;
   font-size: 0.875rem;
   color: var(--text-muted);
+}
+
+.dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
 }
 
 .check-status {

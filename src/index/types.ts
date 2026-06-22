@@ -18,6 +18,8 @@ export const DOC_STATUSES = [
 
 export type DocStatus = (typeof DOC_STATUSES)[number];
 
+export type ContentKind = 'markdown' | 'yaml' | 'json';
+
 export const TYPE_TO_DIR: Record<DocType, string> = {
   adr: 'adr',
   'feature-spec': 'specs',
@@ -60,6 +62,7 @@ export interface DocRecord {
   frontmatter: DocFrontmatter;
   /** True when the file has explicit RepoMind frontmatter (type field). */
   prepared: boolean;
+  contentKind: ContentKind;
 }
 
 export function isDocType(value: unknown): value is DocType {

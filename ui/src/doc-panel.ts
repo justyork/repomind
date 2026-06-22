@@ -1,10 +1,15 @@
 import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
+import { buildPageUrl } from './navigation.js';
 import { getBacklinks } from './api.js';
 import { catalogLabel } from './catalog.js';
+import { renderStructuredPreview } from './structured-preview.js';
 import type { DocDetail } from './api.js';
 
 export interface DocPanelOptions {
   onEdit?: (slug: string) => void;
+  docRelativePath?: string;
+  slugByRelative?: Map<string, string>;
+  onCopyLink?: () => void;
 }
 
 const FOCUS_STORAGE_KEY = 'repomind-page-info-hidden';
@@ -40,7 +45,7 @@ export function renderDocPanel(
     container.innerHTML = `
       <div class="workspace-empty">
         <h1>Knowledge</h1>
-        <p class="placeholder">Select a page from the tree or create one with +.</p>
+        <p class="placeholder">Select a page from the tree or use the ⋯ menu to create one.</p>
       </div>
     `;
     return;
@@ -58,6 +63,11 @@ export function renderDocPanel(
     : [];
   const catalog = catalogLabel(type);
   const focusMode = loadFocusMode();
+  const contentKind = doc.contentKind ?? 'markdown';
+  const isStructured = contentKind === 'json' || contentKind === 'yaml';
+  const editButton = isStructured
+    ? ''
+    : '<button type="button" id="edit-page" class="btn-primary">Edit</button>';
 
   container.innerHTML = `
     <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -75,7 +85,8 @@ export function renderDocPanel(
             <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
               ${focusMode ? 'Show info' : 'Hide info'}
             </button>
-            <button type="button" id="edit-page" class="btn-primary">Edit</button>
+            ${editButton}
+            <button type="button" id="copy-link" class="btn-ghost">Copy link</button>
             <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
           </div>
         </header>
@@ -87,6 +98,7 @@ export function renderDocPanel(
         <dl class="info-list">
           <dt>Status</dt><dd><span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status)}</span></dd>
           <dt>Type</dt><dd>${escapeHtml(type)}</dd>
+          <dt>Format</dt><dd>${escapeHtml(contentKind)}</dd>
           ${
             tags.length > 0
               ? `<dt>Tags</dt><dd>${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join(' ')}</dd>`
@@ -112,18 +124,32 @@ export function renderDocPanel(
   `;
 
   const previewEl = container.querySelector<HTMLDivElement>('#tab-preview')!;
-  previewEl.innerHTML = renderMarkdown(doc.body ?? '');
-  void enhanceMarkdownPreview(previewEl);
+  if (isStructured) {
+    previewEl.innerHTML = renderStructuredPreview(doc.body ?? '', contentKind);
+  } else {
+    const markdownContext =
+      options.docRelativePath && options.slugByRelative
+        ? { docRelativePath: options.docRelativePath, slugByRelative: options.slugByRelative }
+        : undefined;
+    previewEl.innerHTML = renderMarkdown(doc.body ?? '', markdownContext);
+    void enhanceMarkdownPreview(previewEl);
 
-  previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      const slug = link.dataset.slug;
-      if (slug) {
-        container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
-      }
+    previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const slug = link.dataset.slug;
+        if (slug) {
+          container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
+        }
+      });
     });
-  });
+
+    previewEl.querySelectorAll<HTMLAnchorElement>('a.md-link-unresolved').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+      });
+    });
+  }
 
   const fmEl = container.querySelector<HTMLDivElement>('#tab-frontmatter')!;
   fmEl.innerHTML = `<pre class="frontmatter-yaml"></pre>`;
@@ -161,6 +187,13 @@ export function renderDocPanel(
     }
   });
 
+  container.querySelector<HTMLButtonElement>('#copy-link')?.addEventListener('click', () => {
+    if (doc.slug) {
+      void navigator.clipboard.writeText(buildPageUrl(doc.slug));
+      options.onCopyLink?.();
+    }
+  });
+
   container.querySelector<HTMLButtonElement>('#edit-page')?.addEventListener('click', () => {
     if (doc.slug && options.onEdit) {
       options.onEdit(doc.slug);
@@ -176,7 +209,7 @@ export function renderDocPanel(
     });
   });
 
-  if (doc.slug) {
+  if (doc.slug && !isStructured) {
     void getBacklinks(doc.slug)
       .then(({ backlinks }) => {
         const section = container.querySelector<HTMLElement>('#reader-backlinks');

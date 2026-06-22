@@ -1,6 +1,14 @@
 import { marked, type Tokens } from 'marked';
 
+import { slugForMarkdownHref } from './resolve-md-href.js';
+
 let configured = false;
+let renderContext: MarkdownRenderContext | null = null;
+
+export interface MarkdownRenderContext {
+  docRelativePath: string;
+  slugByRelative: Map<string, string>;
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -68,6 +76,35 @@ function configureMarked(): void {
           const slug = decodeURIComponent(href.slice('#wikilink:'.length));
           return `<a href="#" class="wikilink" data-slug="${escapeHtml(slug)}">${text}</a>`;
         }
+
+        if (renderContext && href) {
+          const slug = slugForMarkdownHref(
+            renderContext.docRelativePath,
+            href,
+            renderContext.slugByRelative,
+          );
+          if (slug) {
+            return `<a href="#" class="wikilink" data-slug="${escapeHtml(slug)}">${text}</a>`;
+          }
+        }
+
+        if (href?.startsWith('http://') || href?.startsWith('https://')) {
+          return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+        }
+
+        if (href?.startsWith('mailto:')) {
+          return false;
+        }
+
+        if (href?.startsWith('#')) {
+          return false;
+        }
+
+        // * Unresolved relative links must not change browser pathname (SPA is at /).
+        if (href) {
+          return `<a href="#" class="md-link-unresolved" title="Link not in docs index">${text}</a>`;
+        }
+
         return false;
       },
     },
@@ -76,9 +113,14 @@ function configureMarked(): void {
   configured = true;
 }
 
-export function renderMarkdown(markdown: string): string {
+export function renderMarkdown(markdown: string, context?: MarkdownRenderContext): string {
   configureMarked();
-  return marked.parse(preprocessWikilinks(markdown), { async: false }) as string;
+  renderContext = context ?? null;
+  try {
+    return marked.parse(preprocessWikilinks(markdown), { async: false }) as string;
+  } finally {
+    renderContext = null;
+  }
 }
 
 let mermaidTheme: string | null = null;

@@ -64,6 +64,17 @@ export function collectCheckReport(index: DocIndex): CheckReport | null {
       }
     }
 
+    if (doc.contentKind !== 'markdown') {
+      if (doc.contentKind === 'json') {
+        try {
+          JSON.parse(doc.body);
+        } catch {
+          warnings.push(`invalid JSON syntax in ${doc.relativePath}`);
+        }
+      }
+      continue;
+    }
+
     const lookups = {
       slugSet,
       titleToSlug: new Map(

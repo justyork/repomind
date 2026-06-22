@@ -8,7 +8,9 @@ export function isValidSlug(slug: string): boolean {
 
 /** Builds a stable slug from a path relative to the docs root. */
 export function slugFromRelativePath(relativePath: string): string {
-  const normalized = relativePath.replace(/\\/g, '/').replace(/\.md$/i, '');
+  const normalized = relativePath
+    .replace(/\\/g, '/')
+    .replace(/\.(md|ya?ml|json)$/i, '');
   const segments = normalized.split('/').filter(Boolean);
   if (segments.length === 0) {
     return 'untitled';

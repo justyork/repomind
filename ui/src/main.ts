@@ -18,8 +18,24 @@ import { renderDraftEditor } from './editor.js';
 import { bindThemeToggle, initTheme } from './theme.js';
 import { renderTreeSidebar } from './tree-sidebar.js';
 import { subscribeDocsReload } from './live-reload.js';
+import {
+  normalizeAppUrl,
+  readPathFromUrl,
+  readSlugFromUrl,
+  subscribePopState,
+  writeSlugToUrl,
+} from './navigation.js';
 
+normalizeAppUrl();
 initTheme();
+
+function buildSlugByRelative(docsList: ListDocsItem[]): Map<string, string> {
+  return new Map(docsList.map((doc) => [doc.relativePath, doc.slug]));
+}
+
+function relativePathForSlug(docsList: ListDocsItem[], slug: string): string | undefined {
+  return docsList.find((doc) => doc.slug === slug)?.relativePath;
+}
 
 function showToast(message: string, isError = false): void {
   const banner = document.querySelector<HTMLElement>('#banner');
@@ -30,11 +46,6 @@ function showToast(message: string, isError = false): void {
   banner.classList.toggle('error', isError);
   banner.classList.remove('hidden');
   setTimeout(() => banner.classList.add('hidden'), 5000);
-}
-
-function readSlugParam(): string | null {
-  const slug = new URLSearchParams(window.location.search).get('slug');
-  return slug?.trim() ? slug : null;
 }
 
 async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
@@ -202,7 +213,13 @@ async function main(): Promise<void> {
     }
   }
 
-  async function selectSlug(slug: string): Promise<void> {
+  async function selectSlug(
+    slug: string,
+    options: { updateUrl?: boolean; urlMode?: 'push' | 'replace' } = {},
+  ): Promise<void> {
+    const updateUrl = options.updateUrl ?? true;
+    const urlMode = options.urlMode ?? 'push';
+
     if (viewMode === 'dashboard') {
       setViewMode('workspace');
     }
@@ -212,11 +229,18 @@ async function main(): Promise<void> {
 
     try {
       const doc = await getDoc(slug);
+      const docRelativePath = relativePathForSlug(docs, slug);
       renderDocPanel(workspaceEl, doc, {
-        onEdit: (slug) => {
-          void startEdit(slug);
+        onEdit: (editSlug) => {
+          void startEdit(editSlug);
         },
+        docRelativePath,
+        slugByRelative: buildSlugByRelative(docs),
+        onCopyLink: () => showToast('Link copied'),
       });
+      if (updateUrl) {
+        writeSlugToUrl(slug, urlMode);
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load doc', true);
     }
@@ -281,13 +305,40 @@ async function main(): Promise<void> {
       })();
     });
 
+    subscribePopState((slug) => {
+      if (!slug) {
+        currentSlug = null;
+        renderDocPanel(workspaceEl, null);
+        return;
+      }
+      if (docs.some((doc) => doc.slug === slug)) {
+        void selectSlug(slug, { updateUrl: false });
+      }
+    });
+
     renderDocPanel(workspaceEl, null);
 
-    const slugFromUrl = readSlugParam();
-    if (slugFromUrl && docs.some((d) => d.slug === slugFromUrl)) {
-      await selectSlug(slugFromUrl);
-    } else if (docs.length > 0 && docs[0]) {
-      await selectSlug(docs[0].slug);
+    const slugFromUrl = readSlugFromUrl();
+    if (slugFromUrl) {
+      if (docs.some((doc) => doc.slug === slugFromUrl)) {
+        await selectSlug(slugFromUrl, { updateUrl: false });
+      } else {
+        showToast(`Unknown page: ${slugFromUrl}`, true);
+      }
+    } else {
+      const pathFromUrl = readPathFromUrl();
+      const pathSlug = pathFromUrl
+        ? docs.find((doc) => doc.relativePath === pathFromUrl)?.slug
+        : undefined;
+      if (pathFromUrl && pathSlug) {
+        await selectSlug(pathSlug, { updateUrl: false });
+      } else if (pathFromUrl) {
+        showToast(`Unknown path: ${pathFromUrl}`, true);
+      } else if (tree.indexPageSlug) {
+        await selectSlug(tree.indexPageSlug, { urlMode: 'replace' });
+      } else if (docs.length > 0 && docs[0]) {
+        await selectSlug(docs[0].slug, { urlMode: 'replace' });
+      }
     }
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Failed to load workspace', true);

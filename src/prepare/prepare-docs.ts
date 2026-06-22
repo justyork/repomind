@@ -37,13 +37,16 @@ function titleFromSlug(slug: string): string {
 }
 
 export function listUnpreparedFiles(index: DocIndex): UnpreparedFile[] {
-  return index.listUnprepared().map((doc) => ({
-    relativePath: doc.relativePath,
-    path: doc.path,
-    suggestedType: doc.type,
-    suggestedSlug: doc.slug,
-    suggestedTitle: doc.title,
-  }));
+  return index
+    .listUnprepared()
+    .filter((doc) => doc.contentKind === 'markdown')
+    .map((doc) => ({
+      relativePath: doc.relativePath,
+      path: doc.path,
+      suggestedType: doc.type,
+      suggestedSlug: doc.slug,
+      suggestedTitle: doc.title,
+    }));
 }
 
 export function prepareDocFile(
@@ -109,4 +112,52 @@ export function prepareDocFile(
     slug,
     type: inferredType,
   };
+}
+
+export interface PrepareAllOptions extends PrepareOptions {
+  dryRun?: boolean;
+}
+
+export interface PrepareAllResult {
+  prepared: PrepareResult[];
+  skipped: Array<{ relativePath: string; reason: string }>;
+}
+
+export function prepareAllDocs(
+  index: DocIndex,
+  options: PrepareAllOptions = {},
+): PrepareAllResult {
+  const unprepared = listUnpreparedFiles(index);
+  const prepared: PrepareResult[] = [];
+  const skipped: Array<{ relativePath: string; reason: string }> = [];
+
+  for (const file of unprepared) {
+    if (options.dryRun) {
+      prepared.push({
+        path: file.path,
+        relativePath: file.relativePath,
+        slug: file.suggestedSlug,
+        type: file.suggestedType,
+      });
+      continue;
+    }
+
+    try {
+      prepared.push(
+        prepareDocFile(index, file.relativePath, {
+          type: options.type,
+          slug: options.slug,
+          title: options.title,
+          status: options.status,
+        }),
+      );
+    } catch (error) {
+      skipped.push({
+        relativePath: file.relativePath,
+        reason: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return { prepared, skipped };
 }

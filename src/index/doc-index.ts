@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
+import { contentKindFromRelativePath } from './knowledge-file.js';
 import { isValidSlug, slugFromRelativePath } from './slug.js';
 import {
   DIR_TO_TYPE,
@@ -52,17 +53,73 @@ function inferTypeFromRelative(relative: string): DocType {
   return DIR_TO_TYPE[typeDir ?? ''] ?? 'wiki-page';
 }
 
+function titleFromBasename(basename: string): string {
+  return basename
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function inferSlug(relative: string, data: Record<string, unknown>, inferredType: DocType): string {
   if (typeof data.slug === 'string' && isValidSlug(data.slug)) {
     return data.slug;
   }
 
-  const basename = path.basename(relative, '.md');
+  const basename = path.basename(relative).replace(/\.(md|ya?ml|json)$/i, '');
   if (inferredType !== 'wiki-page' && isValidSlug(basename)) {
     return basename;
   }
 
   return slugFromRelativePath(relative);
+}
+
+function parseStructuredFile(
+  filePath: string,
+  knowledgeRoot: string,
+  contentKind: 'yaml' | 'json',
+): DocRecord {
+  const raw = fs.readFileSync(filePath, 'utf8');
+  const relative = path.relative(knowledgeRoot, filePath).replace(/\\/g, '/');
+  const inferredType = inferTypeFromRelative(relative);
+  const slug = slugFromRelativePath(relative);
+  const basename = path.basename(relative).replace(/\.(ya?ml|json)$/i, '');
+  const title = titleFromBasename(basename);
+
+  const frontmatter: DocFrontmatter = {
+    type: inferredType,
+    slug,
+    status: 'accepted',
+    title,
+    tags: [],
+    related: [],
+  };
+
+  return {
+    path: filePath,
+    relativePath: relative,
+    slug,
+    type: inferredType,
+    status: 'accepted',
+    title,
+    tags: [],
+    related: [],
+    body: raw,
+    frontmatter,
+    prepared: false,
+    contentKind,
+  };
+}
+
+function parseKnowledgeFile(filePath: string, knowledgeRoot: string): DocRecord | null {
+  const relative = path.relative(knowledgeRoot, filePath).replace(/\\/g, '/');
+  const contentKind = contentKindFromRelativePath(relative);
+  if (contentKind === 'markdown') {
+    return parseDoc(filePath, knowledgeRoot);
+  }
+  if (contentKind === 'yaml' || contentKind === 'json') {
+    return parseStructuredFile(filePath, knowledgeRoot, contentKind);
+  }
+  const _exhaustive: never = contentKind;
+  return _exhaustive;
 }
 
 function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
@@ -105,7 +162,17 @@ function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
     body: parsed.content.trim(),
     frontmatter,
     prepared,
+    contentKind: 'markdown',
   };
+}
+
+export function listKnowledgeFiles(knowledgeRoot: string): string[] {
+  const pattern = path.join(knowledgeRoot, '**/*.{md,yml,yaml,json}').replace(/\\/g, '/');
+  return fg.sync(pattern, {
+    absolute: true,
+    onlyFiles: true,
+    ignore: GLOB_IGNORE,
+  });
 }
 
 export function listMarkdownFiles(knowledgeRoot: string): string[] {
@@ -142,7 +209,7 @@ export class DocIndex {
       return [];
     }
 
-    const files = listMarkdownFiles(this.knowledgeRoot);
+    const files = listKnowledgeFiles(this.knowledgeRoot);
     const seen = new Set<string>();
 
     for (const filePath of files) {
@@ -154,7 +221,7 @@ export class DocIndex {
         continue;
       }
 
-      const record = parseDoc(filePath, this.knowledgeRoot);
+      const record = parseKnowledgeFile(filePath, this.knowledgeRoot);
       if (record) {
         this.cache.set(filePath, { mtimeMs: stat.mtimeMs, record });
       } else {
@@ -178,6 +245,16 @@ export class DocIndex {
   getDocBySlug(slug: string): DocRecord | null {
     this.refresh();
     const matches = this.getDocs().filter((doc) => doc.slug === slug);
+    if (matches.length !== 1) {
+      return null;
+    }
+    return matches[0] ?? null;
+  }
+
+  getDocByRelativePath(relativePath: string): DocRecord | null {
+    this.refresh();
+    const normalized = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
+    const matches = this.getDocs().filter((doc) => doc.relativePath === normalized);
     if (matches.length !== 1) {
       return null;
     }
