@@ -15,5 +15,5 @@
 - Folder index pages use `{folder}/README.md`; root index is `docs/README.md`.
 - UI routing is SPA at `/` with `?slug=` deep links; avoid path-based browser navigation outside `/`.
 - Primary dogfood target: `~/www/GAMEDEV/skyforge-caravan`.
-- v3 roadmap status: P0 navigation/README index done; P1 yaml/yml/json reader done; P2 images is next.
+- v3 roadmap status: P0 navigation/README index done; P1 yaml/yml/json reader done; P2 images done; dogfood + P3 polish next.
 - Structured file slugs are path-derived (e.g. `config/app.yaml` → `config-app`).
