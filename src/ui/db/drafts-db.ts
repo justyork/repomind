@@ -16,6 +16,7 @@ export interface DraftRow {
   related: string[];
   published_path: string | null;
   forked_from: string | null;
+  target_path: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -28,6 +29,7 @@ export interface CreateDraftInput {
   tags?: string[];
   related?: string[];
   forked_from?: string | null;
+  target_path?: string | null;
 }
 
 export interface UpdateDraftInput {
@@ -76,6 +78,7 @@ function rowToDraft(row: Record<string, unknown>): DraftRow {
     related: JSON.parse(String(row.related_json)) as string[],
     published_path: row.published_path ? String(row.published_path) : null,
     forked_from: row.forked_from ? String(row.forked_from) : null,
+    target_path: row.target_path ? String(row.target_path) : null,
     created_at: String(row.created_at),
     updated_at: String(row.updated_at),
   };
@@ -91,6 +94,14 @@ export class DraftsDb {
     this.db = new Database(dbPath);
     this.db.pragma('journal_mode = WAL');
     this.db.exec(SCHEMA_SQL);
+    this.ensureTargetPathColumn();
+  }
+
+  private ensureTargetPathColumn(): void {
+    const columns = this.db.prepare(`PRAGMA table_info(drafts)`).all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'target_path')) {
+      this.db.exec(`ALTER TABLE drafts ADD COLUMN target_path TEXT`);
+    }
   }
 
   close(): void {
@@ -137,8 +148,8 @@ export class DraftsDb {
 
     this.db
       .prepare(
-        `INSERT INTO drafts (id, slug, type, status, title, body, tags_json, related_json, forked_from, created_at, updated_at)
-         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO drafts (id, slug, type, status, title, body, tags_json, related_json, forked_from, target_path, created_at, updated_at)
+         VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         id,
@@ -149,6 +160,7 @@ export class DraftsDb {
         tags,
         related,
         input.forked_from ?? null,
+        input.target_path ?? null,
         now,
         now,
       );

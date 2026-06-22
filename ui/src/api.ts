@@ -3,6 +3,8 @@ export interface ListDocsItem {
   type: string;
   title: string;
   status: string;
+  relativePath: string;
+  contentKind?: 'markdown' | 'yaml' | 'json';
 }
 
 export interface SearchResult {
@@ -34,6 +36,7 @@ export interface DocDetail {
   found: boolean;
   slug?: string;
   path?: string;
+  contentKind?: 'markdown' | 'yaml' | 'json';
   frontmatter?: Record<string, unknown>;
   body?: string;
   agentShape?: unknown;
@@ -90,6 +93,157 @@ export interface Draft {
   tags: string[];
   related: string[];
   forked_from: string | null;
+  target_path?: string | null;
+}
+
+export interface TreePageNode {
+  kind: 'page';
+  name: string;
+  relativePath: string;
+  slug: string;
+  title: string;
+  status: string;
+  type: string;
+  contentKind: 'markdown' | 'yaml' | 'json';
+}
+
+export interface TreeFolderNode {
+  kind: 'folder';
+  name: string;
+  relativePath: string;
+  emoji: string | null;
+  indexPageSlug: string | null;
+  children: TreeNode[];
+}
+
+export type TreeNode = TreePageNode | TreeFolderNode;
+
+export function getDocsTree(): Promise<{ tree: TreeFolderNode; catalogMeta: Record<string, string> }> {
+  return fetchJson('/api/tree');
+}
+
+export interface BacklinkItem {
+  slug: string;
+  title: string;
+  kind: string;
+}
+
+export function getBacklinks(slug: string): Promise<{ slug: string; backlinks: BacklinkItem[] }> {
+  return fetchJson(`/api/backlinks/${encodeURIComponent(slug)}`);
+}
+
+export function getLinkHealth(): Promise<{
+  orphanCount: number;
+  orphanSlugs: string[];
+  brokenCount: number;
+  brokenTargets: string[];
+  oneWayCount: number;
+}> {
+  return fetchJson('/api/link-health');
+}
+
+export function openDraftForSlug(slug: string): Promise<{ draft: Draft }> {
+  return fetchJson('/api/drafts/open', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slug }),
+  });
+}
+
+export function createFsFolder(parentPath: string, name: string): Promise<{ result: { relativePath: string } }> {
+  return fetchJson('/api/fs/folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentPath, name }),
+  });
+}
+
+export function createFsPage(
+  parentPath: string,
+  name: string,
+  title?: string,
+  templateId?: string,
+): Promise<{ page: { slug: string; relativePath: string }; draft: Draft }> {
+  return fetchJson('/api/fs/page', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ parentPath, name, title, templateId }),
+  });
+}
+
+export interface FsPageMutationResult {
+  relativePath: string;
+  slug: string;
+  previousSlug: string;
+  slugChanged: boolean;
+  inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
+}
+
+export function moveFsPage(
+  fromPath: string,
+  toDir: string,
+): Promise<{ result: FsPageMutationResult }> {
+  return fetchJson('/api/fs/move', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fromPath, toDir }),
+  });
+}
+
+export function renameFsPage(
+  pagePath: string,
+  newName: string,
+): Promise<{ result: FsPageMutationResult }> {
+  return fetchJson('/api/fs/rename', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: pagePath, newName }),
+  });
+}
+
+export interface FsDeletePageResult {
+  relativePath: string;
+  slug: string;
+  inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
+}
+
+export interface FsDeleteFolderResult {
+  relativePath: string;
+  deletedSlugs: string[];
+  inboundWarnings: Array<{ slug: string; title: string }>;
+  cascadeUpdated: string[];
+}
+
+export function deleteFsNode(
+  path: string,
+  kind: 'page' | 'folder',
+): Promise<{ result: FsDeletePageResult | FsDeleteFolderResult }> {
+  return fetchJson('/api/fs/delete', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, kind }),
+  });
+}
+
+export interface PageTemplate {
+  id: string;
+  label: string;
+  type: string;
+  filename: string;
+}
+
+export function listTemplates(): Promise<{ templates: PageTemplate[] }> {
+  return fetchJson('/api/templates');
+}
+
+export function setCatalogEmoji(folderPath: string, emoji: string): Promise<{ meta: Record<string, string> }> {
+  return fetchJson('/api/catalog-meta', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: folderPath, emoji }),
+  });
 }
 
 export function listDrafts(): Promise<{ drafts: Draft[] }> {
@@ -178,5 +332,39 @@ export function prepareDoc(path: string, type?: string): Promise<{ result: { slu
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path, type }),
+  });
+}
+
+export function prepareAllDocs(dryRun = false): Promise<{
+  result: { prepared: Array<{ relativePath: string; slug: string; type: string }>; skipped: Array<{ relativePath: string; reason: string }> };
+  dryRun: boolean;
+}> {
+  return fetchJson('/api/prepare-all', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ dryRun }),
+  });
+}
+
+export function syncAllLinks(options: {
+  dryRun?: boolean;
+  convertBody?: boolean;
+  syncRelated?: boolean;
+} = {}): Promise<{
+  result: {
+    files: Array<{
+      relativePath: string;
+      convertedLinks: number;
+      addedRelated: string[];
+      changed: boolean;
+      skipped: boolean;
+    }>;
+  };
+  dryRun: boolean;
+}> {
+  return fetchJson('/api/sync-links', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(options),
   });
 }

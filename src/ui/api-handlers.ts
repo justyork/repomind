@@ -1,17 +1,25 @@
-import type { IncomingMessage } from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
 import { collectCheckReport } from '../check/collect-violations.js';
 import type { DocIndex } from '../index/doc-index.js';
+import {
+  computeLinkHealth,
+  getBacklinksForSlug,
+} from '../index/link-index.js';
 import { isValidSlug } from '../index/slug.js';
 import { isDocStatus, isDocType } from '../index/types.js';
 import { listUnpreparedFiles, prepareDocFile } from '../prepare/prepare-docs.js';
-import { exploreGraph } from '../tools/explore-graph.js';
+import { buildLinkIndexForDocs, exploreGraph } from '../tools/explore-graph.js';
 import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
 import { searchDocs } from '../tools/search-docs.js';
+import type { DocsWatcher } from './docs-watcher.js';
 import { ALL_GRAPH_SLUG, exploreGraphAll } from './graph-all.js';
+import { buildDocsTree } from './fs-tree.js';
+import { readCatalogMeta } from './catalog-meta.js';
 import { computeKnowledgeStats } from './stats.js';
+import { listPageTemplates } from './templates.js';
 
 export interface ApiResponse {
   status: number;
@@ -102,6 +110,55 @@ export function handleApiRequest(
     return { status: 200, body: report };
   }
 
+  if (pathname === '/api/tree') {
+    const tree = buildDocsTree(index);
+    if (!tree) {
+      return jsonError(404, 'no docs/ directory found');
+    }
+    return { status: 200, body: { tree, catalogMeta: readCatalogMeta(index.getKnowledgeRoot()!) } };
+  }
+
+  if (pathname === '/api/templates') {
+    return { status: 200, body: { templates: listPageTemplates() } };
+  }
+
+  if (pathname === '/api/link-health') {
+    const docs = index.refresh();
+    const snapshot = buildLinkIndexForDocs(index);
+    const health = computeLinkHealth(snapshot, docs);
+    return {
+      status: 200,
+      body: {
+        orphanCount: health.orphanSlugs.length,
+        orphanSlugs: health.orphanSlugs,
+        brokenCount: health.brokenTargets.length,
+        brokenTargets: health.brokenTargets,
+        oneWayCount: health.oneWayCount,
+      },
+    };
+  }
+
+  const backlinksMatch = pathname.match(/^\/api\/backlinks\/([^/]+)$/);
+  if (backlinksMatch) {
+    const slug = decodeURIComponent(backlinksMatch[1] ?? '');
+    if (!isValidSlug(slug)) {
+      return jsonError(400, `invalid slug: ${slug}`);
+    }
+    const docs = index.refresh();
+    const docsBySlug = new Map(docs.map((doc) => [doc.slug, doc]));
+    if (!docsBySlug.has(slug)) {
+      return jsonError(404, `unknown slug: ${slug}`);
+    }
+    const snapshot = buildLinkIndexForDocs(index);
+    return {
+      status: 200,
+      body: {
+        slug,
+        backlinks: getBacklinksForSlug(snapshot, slug, docsBySlug),
+      },
+    };
+  }
+
   if (pathname === '/api/unprepared') {
     return { status: 200, body: { files: listUnpreparedFiles(index) } };
   }
@@ -146,6 +203,7 @@ export function handleApiRequest(
         found: true,
         slug: doc.slug,
         path: doc.path,
+        contentKind: doc.contentKind,
         frontmatter: doc.frontmatter,
         body: doc.body,
         agentShape,
@@ -162,4 +220,52 @@ export function routeApi(index: DocIndex, req: IncomingMessage): ApiResponse | n
     return null;
   }
   return handleApiRequest(index, req, url.pathname, url.searchParams);
+}
+
+const docsEventClients = new Set<ServerResponse>();
+
+/** Closes live SSE streams so `server.close()` can finish during shutdown. */
+export function closeAllDocsEventStreams(): void {
+  for (const res of docsEventClients) {
+    if (!res.writableEnded) {
+      res.end();
+    }
+  }
+  docsEventClients.clear();
+}
+
+export function handleDocsEvents(
+  req: IncomingMessage,
+  res: ServerResponse,
+  docsWatcher: DocsWatcher | undefined,
+): void {
+  if ((req.method ?? 'GET') !== 'GET') {
+    res.writeHead(405, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'method not allowed' }));
+    return;
+  }
+
+  if (!docsWatcher) {
+    res.writeHead(503, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ error: 'docs watcher unavailable' }));
+    return;
+  }
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const sendRevision = (revision: number): void => {
+    res.write(`data: ${JSON.stringify({ revision })}\n\n`);
+  };
+
+  sendRevision(docsWatcher.getRevision());
+  const unsubscribe = docsWatcher.subscribe(sendRevision);
+  docsEventClients.add(res);
+  req.on('close', () => {
+    unsubscribe();
+    docsEventClients.delete(res);
+  });
 }

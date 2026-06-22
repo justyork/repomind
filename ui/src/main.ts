@@ -1,23 +1,41 @@
 import {
-  createDraft,
   getDoc,
+  getDocsTree,
   getHealth,
   listDocs,
   listDrafts,
+  openDraftForSlug,
   searchDocs,
   type Draft,
   type ListDocsItem,
   type SearchResult,
+  type TreeFolderNode,
 } from './api.js';
 import { catalogLabel } from './catalog.js';
 import { renderDashboard } from './dashboard.js';
 import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
-import { showNewDraftModal } from './new-draft-modal.js';
-import { renderSidebar } from './sidebar.js';
 import { bindThemeToggle, initTheme } from './theme.js';
+import { renderTreeSidebar } from './tree-sidebar.js';
+import { subscribeDocsReload } from './live-reload.js';
+import {
+  normalizeAppUrl,
+  readPathFromUrl,
+  readSlugFromUrl,
+  subscribePopState,
+  writeSlugToUrl,
+} from './navigation.js';
 
+normalizeAppUrl();
 initTheme();
+
+function buildSlugByRelative(docsList: ListDocsItem[]): Map<string, string> {
+  return new Map(docsList.map((doc) => [doc.relativePath, doc.slug]));
+}
+
+function relativePathForSlug(docsList: ListDocsItem[], slug: string): string | undefined {
+  return docsList.find((doc) => doc.slug === slug)?.relativePath;
+}
 
 function showToast(message: string, isError = false): void {
   const banner = document.querySelector<HTMLElement>('#banner');
@@ -30,15 +48,16 @@ function showToast(message: string, isError = false): void {
   setTimeout(() => banner.classList.add('hidden'), 5000);
 }
 
-function readSlugParam(): string | null {
-  const slug = new URLSearchParams(window.location.search).get('slug');
-  return slug?.trim() ? slug : null;
-}
-
 async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
   const { drafts } = await listDrafts();
   sidebarEl.refreshDrafts?.(drafts);
   return drafts;
+}
+
+async function reloadTree(sidebarEl: HTMLElement): Promise<TreeFolderNode> {
+  const [{ tree }, { drafts }] = await Promise.all([getDocsTree(), listDrafts()]);
+  sidebarEl.refreshTree?.(tree, drafts);
+  return tree;
 }
 
 async function main(): Promise<void> {
@@ -52,6 +71,7 @@ async function main(): Promise<void> {
   const searchDropdown = document.querySelector<HTMLElement>('#search-dropdown')!;
 
   let docs: ListDocsItem[] = [];
+  let currentSlug: string | null = null;
   let viewMode: 'workspace' | 'dashboard' = 'workspace';
   let dashboardRefresh: (() => Promise<void>) | null = null;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +88,7 @@ async function main(): Promise<void> {
         },
         onPublished: (path) => {
           void (async () => {
-            await reloadDrafts(sidebarEl);
+            await reloadTree(sidebarEl);
             await refreshStats();
             showToast(`Published: ${path}`);
           })();
@@ -159,46 +179,68 @@ async function main(): Promise<void> {
     renderDraftEditor(workspaceEl, draft, {
       onPublished: (path) => {
         void (async () => {
-          await reloadDrafts(sidebarEl);
+          const docsRes = await listDocs();
+          docs = docsRes.docs;
+          await reloadTree(sidebarEl);
           await refreshStats();
           void dashboardRefresh?.();
           showToast(`Published: ${path}`);
           await selectSlug(draft.slug);
         })();
       },
+      onClosed: () => {
+        void selectSlug(draft.forked_from ?? draft.slug).catch(() => {
+          renderDocPanel(workspaceEl, null);
+        });
+      },
       onDeleted: () => {
         void (async () => {
-          await reloadDrafts(sidebarEl);
+          await reloadTree(sidebarEl);
           renderDocPanel(workspaceEl, null);
         })();
       },
       onError: (message) => showToast(message, true),
-    }, knownSlugs());
+    }, docs);
   }
 
-  async function selectSlug(slug: string): Promise<void> {
+  async function startEdit(slug: string): Promise<void> {
+    try {
+      const { draft } = await openDraftForSlug(slug);
+      await reloadDrafts(sidebarEl);
+      openDraft(draft);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Edit failed', true);
+    }
+  }
+
+  async function selectSlug(
+    slug: string,
+    options: { updateUrl?: boolean; urlMode?: 'push' | 'replace' } = {},
+  ): Promise<void> {
+    const updateUrl = options.updateUrl ?? true;
+    const urlMode = options.urlMode ?? 'push';
+
     if (viewMode === 'dashboard') {
       setViewMode('workspace');
     }
 
+    currentSlug = slug;
     sidebarEl.setActiveSlug?.(slug);
 
     try {
       const doc = await getDoc(slug);
+      const docRelativePath = relativePathForSlug(docs, slug);
       renderDocPanel(workspaceEl, doc, {
-        onFork: (forkSlug) => {
-          void createDraft({ forkFrom: forkSlug })
-            .then(({ draft }) => {
-              void reloadDrafts(sidebarEl).then(() => openDraft(draft));
-            })
-            .catch((err: unknown) => {
-              showToast(err instanceof Error ? err.message : 'Fork failed', true);
-            });
+        onEdit: (editSlug) => {
+          void startEdit(editSlug);
         },
-        onNavigateCatalog: (type) => {
-          sidebarEl.querySelector<HTMLButtonElement>(`[data-catalog="${type}"]`)?.click();
-        },
+        docRelativePath,
+        slugByRelative: buildSlugByRelative(docs),
+        onCopyLink: () => showToast('Link copied'),
       });
+      if (updateUrl) {
+        writeSlugToUrl(slug, urlMode);
+      }
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Failed to load doc', true);
     }
@@ -211,38 +253,93 @@ async function main(): Promise<void> {
   try {
     await refreshStats();
 
-    const docsRes = await listDocs();
+    const [docsRes, { tree }, { drafts }] = await Promise.all([
+      listDocs(),
+      getDocsTree(),
+      listDrafts(),
+    ]);
     docs = docsRes.docs;
-    const drafts = await reloadDrafts(sidebarEl);
 
-    renderSidebar(sidebarEl, docs, drafts, {
+    renderTreeSidebar(sidebarEl, tree, drafts, {
       onSelectSlug: (slug) => {
         void selectSlug(slug);
       },
       onSelectDraft: (draft) => openDraft(draft),
-      onNewDraft: () => {
-        void showNewDraftModal(knownSlugs()).then((values) => {
-          if (!values) {
-            return;
-          }
-          void createDraft({ slug: values.slug, type: values.type })
-            .then(({ draft }) => {
-              void reloadDrafts(sidebarEl).then(() => openDraft(draft));
-            })
-            .catch((err: unknown) => {
-              showToast(err instanceof Error ? err.message : 'Create failed', true);
-            });
-        });
+      onTreeChanged: () => {
+        void (async () => {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          await reloadTree(sidebarEl);
+          await refreshStats();
+        })();
       },
+      onFsDeleted: (deletedSlugs) => {
+        void (async () => {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          if (currentSlug && deletedSlugs.includes(currentSlug)) {
+            currentSlug = null;
+            renderDocPanel(workspaceEl, null);
+          }
+          await reloadTree(sidebarEl);
+          await refreshStats();
+        })();
+      },
+      onError: (message) => showToast(message, true),
+      onNotify: (message) => showToast(message),
+    });
+
+    subscribeDocsReload(() => {
+      void (async () => {
+        try {
+          const docsResInner = await listDocs();
+          docs = docsResInner.docs;
+          await reloadTree(sidebarEl);
+          await refreshStats();
+          if (currentSlug && !docs.some((doc) => doc.slug === currentSlug)) {
+            currentSlug = null;
+            renderDocPanel(workspaceEl, null);
+          }
+        } catch {
+          // ignore transient reload errors
+        }
+      })();
+    });
+
+    subscribePopState((slug) => {
+      if (!slug) {
+        currentSlug = null;
+        renderDocPanel(workspaceEl, null);
+        return;
+      }
+      if (docs.some((doc) => doc.slug === slug)) {
+        void selectSlug(slug, { updateUrl: false });
+      }
     });
 
     renderDocPanel(workspaceEl, null);
 
-    const slugFromUrl = readSlugParam();
-    if (slugFromUrl && docs.some((d) => d.slug === slugFromUrl)) {
-      await selectSlug(slugFromUrl);
-    } else if (docs.length > 0 && docs[0]) {
-      await selectSlug(docs[0].slug);
+    const slugFromUrl = readSlugFromUrl();
+    if (slugFromUrl) {
+      if (docs.some((doc) => doc.slug === slugFromUrl)) {
+        await selectSlug(slugFromUrl, { updateUrl: false });
+      } else {
+        showToast(`Unknown page: ${slugFromUrl}`, true);
+      }
+    } else {
+      const pathFromUrl = readPathFromUrl();
+      const pathSlug = pathFromUrl
+        ? docs.find((doc) => doc.relativePath === pathFromUrl)?.slug
+        : undefined;
+      if (pathFromUrl && pathSlug) {
+        await selectSlug(pathSlug, { updateUrl: false });
+      } else if (pathFromUrl) {
+        showToast(`Unknown path: ${pathFromUrl}`, true);
+      } else if (tree.indexPageSlug) {
+        await selectSlug(tree.indexPageSlug, { urlMode: 'replace' });
+      } else if (docs.length > 0 && docs[0]) {
+        await selectSlug(docs[0].slug, { urlMode: 'replace' });
+      }
     }
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Failed to load workspace', true);

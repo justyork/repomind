@@ -1,10 +1,37 @@
-import { marked } from 'marked';
+import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
+import { buildPageUrl } from './navigation.js';
+import { getBacklinks } from './api.js';
 import { catalogLabel } from './catalog.js';
+import { renderStructuredPreview } from './structured-preview.js';
 import type { DocDetail } from './api.js';
 
 export interface DocPanelOptions {
-  onFork?: (slug: string) => void;
-  onNavigateCatalog?: (type: string) => void;
+  onEdit?: (slug: string) => void;
+  docRelativePath?: string;
+  slugByRelative?: Map<string, string>;
+  onCopyLink?: () => void;
+}
+
+const FOCUS_STORAGE_KEY = 'repomind-page-info-hidden';
+
+function loadFocusMode(): boolean {
+  try {
+    const raw = localStorage.getItem(FOCUS_STORAGE_KEY);
+    if (raw === null) {
+      return true;
+    }
+    return raw === 'true';
+  } catch {
+    return true;
+  }
+}
+
+function saveFocusMode(hidden: boolean): void {
+  try {
+    localStorage.setItem(FOCUS_STORAGE_KEY, hidden ? 'true' : 'false');
+  } catch {
+    // ignore
+  }
 }
 
 export function renderDocPanel(
@@ -18,7 +45,7 @@ export function renderDocPanel(
     container.innerHTML = `
       <div class="workspace-empty">
         <h1>Knowledge</h1>
-        <p class="placeholder">Select a page from the catalog tree or create a new draft.</p>
+        <p class="placeholder">Select a page from the tree or use the ⋯ menu to create one.</p>
       </div>
     `;
     return;
@@ -35,6 +62,12 @@ export function renderDocPanel(
     ? fm.related.filter((r): r is string => typeof r === 'string')
     : [];
   const catalog = catalogLabel(type);
+  const focusMode = loadFocusMode();
+  const contentKind = doc.contentKind ?? 'markdown';
+  const isStructured = contentKind === 'json' || contentKind === 'yaml';
+  const editButton = isStructured
+    ? ''
+    : '<button type="button" id="edit-page" class="btn-primary">Edit</button>';
 
   container.innerHTML = `
     <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -44,22 +77,28 @@ export function renderDocPanel(
       <span class="crumb-sep">›</span>
       <span class="crumb current">${escapeHtml(title)}</span>
     </nav>
-    <div class="page-layout">
+    <div class="page-layout${focusMode ? ' page-layout--focus' : ''}">
       <article class="page-content">
         <header class="page-header">
           <h1 class="doc-title">${escapeHtml(title)}</h1>
           <div class="workspace-actions">
-            <button type="button" id="fork-draft" class="btn-primary">Edit as draft</button>
+            <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
+              ${focusMode ? 'Show info' : 'Hide info'}
+            </button>
+            ${editButton}
+            <button type="button" id="copy-link" class="btn-ghost">Copy link</button>
             <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
           </div>
         </header>
         <div id="tab-preview" class="markdown-preview reader-preview"></div>
+        <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
       </article>
       <aside class="page-info">
         <h2 class="page-info-title">Page info</h2>
         <dl class="info-list">
           <dt>Status</dt><dd><span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status)}</span></dd>
           <dt>Type</dt><dd>${escapeHtml(type)}</dd>
+          <dt>Format</dt><dd>${escapeHtml(contentKind)}</dd>
           ${
             tags.length > 0
               ? `<dt>Tags</dt><dd>${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join(' ')}</dd>`
@@ -85,7 +124,32 @@ export function renderDocPanel(
   `;
 
   const previewEl = container.querySelector<HTMLDivElement>('#tab-preview')!;
-  previewEl.innerHTML = marked.parse(doc.body ?? '', { async: false }) as string;
+  if (isStructured) {
+    previewEl.innerHTML = renderStructuredPreview(doc.body ?? '', contentKind);
+  } else {
+    const markdownContext =
+      options.docRelativePath && options.slugByRelative
+        ? { docRelativePath: options.docRelativePath, slugByRelative: options.slugByRelative }
+        : undefined;
+    previewEl.innerHTML = renderMarkdown(doc.body ?? '', markdownContext);
+    void enhanceMarkdownPreview(previewEl);
+
+    previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        const slug = link.dataset.slug;
+        if (slug) {
+          container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
+        }
+      });
+    });
+
+    previewEl.querySelectorAll<HTMLAnchorElement>('a.md-link-unresolved').forEach((link) => {
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+      });
+    });
+  }
 
   const fmEl = container.querySelector<HTMLDivElement>('#tab-frontmatter')!;
   fmEl.innerHTML = `<pre class="frontmatter-yaml"></pre>`;
@@ -105,21 +169,34 @@ export function renderDocPanel(
     });
   });
 
+  container.querySelector<HTMLButtonElement>('#toggle-focus')?.addEventListener('click', () => {
+    const layout = container.querySelector('.page-layout');
+    const btn = container.querySelector<HTMLButtonElement>('#toggle-focus');
+    const next = !layout?.classList.contains('page-layout--focus');
+    layout?.classList.toggle('page-layout--focus', next);
+    saveFocusMode(next);
+    if (btn) {
+      btn.setAttribute('aria-pressed', String(next));
+      btn.textContent = next ? 'Show info' : 'Hide info';
+    }
+  });
+
   container.querySelector<HTMLButtonElement>('#copy-path')?.addEventListener('click', () => {
     if (doc.path) {
       void navigator.clipboard.writeText(doc.path);
     }
   });
 
-  container.querySelector<HTMLButtonElement>('#fork-draft')?.addEventListener('click', () => {
-    if (doc.slug && options.onFork) {
-      options.onFork(doc.slug);
+  container.querySelector<HTMLButtonElement>('#copy-link')?.addEventListener('click', () => {
+    if (doc.slug) {
+      void navigator.clipboard.writeText(buildPageUrl(doc.slug));
+      options.onCopyLink?.();
     }
   });
 
-  container.querySelector<HTMLButtonElement>('[data-crumb="catalog"]')?.addEventListener('click', () => {
-    if (type && options.onNavigateCatalog) {
-      options.onNavigateCatalog(type);
+  container.querySelector<HTMLButtonElement>('#edit-page')?.addEventListener('click', () => {
+    if (doc.slug && options.onEdit) {
+      options.onEdit(doc.slug);
     }
   });
 
@@ -131,6 +208,39 @@ export function renderDocPanel(
       }
     });
   });
+
+  if (doc.slug && !isStructured) {
+    void getBacklinks(doc.slug)
+      .then(({ backlinks }) => {
+        const section = container.querySelector<HTMLElement>('#reader-backlinks');
+        if (!section || backlinks.length === 0) {
+          return;
+        }
+        section.classList.remove('hidden');
+        section.innerHTML = `
+          <h2 class="reader-backlinks-title">Backlinks</h2>
+          <div class="reader-backlinks-list">
+            ${backlinks
+              .map(
+                (item) =>
+                  `<button type="button" class="related-chip" data-slug="${escapeHtml(item.slug)}">${escapeHtml(item.title)} <span class="backlink-kind">${escapeHtml(item.kind)}</span></button>`,
+              )
+              .join('')}
+          </div>
+        `;
+        section.querySelectorAll<HTMLButtonElement>('.related-chip').forEach((chip) => {
+          chip.addEventListener('click', () => {
+            const slug = chip.dataset.slug;
+            if (slug) {
+              container.dispatchEvent(new CustomEvent('navigate-slug', { detail: { slug } }));
+            }
+          });
+        });
+      })
+      .catch(() => {
+        // backlinks are optional enrichment
+      });
+  }
 }
 
 function escapeHtml(text: string): string {

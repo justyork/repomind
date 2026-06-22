@@ -1,8 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
+import { closeAllDocsEventStreams } from '../ui/api-handlers.js';
+import { DocsWatcher } from '../ui/docs-watcher.js';
 import { openDraftsDb } from '../ui/db/drafts-db.js';
-import { resolveUiStaticDir, startUiServer } from '../ui/server.js';
+import { destroyUiServerConnections, resolveUiStaticDir, startUiServer } from '../ui/server.js';
 
 export interface UiCommandOptions {
   cwd?: string;
@@ -29,12 +31,15 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
 
   try {
     const draftsDb = openDraftsDb(index.getKnowledgeRoot()!);
+    const docsWatcher = new DocsWatcher(index);
+    docsWatcher.start(index.getKnowledgeRoot()!);
     const server = await startUiServer({
       host: '127.0.0.1',
       port,
       index,
       staticDir,
       draftsDb,
+      docsWatcher,
     });
 
     const docCount = index.refresh().length;
@@ -45,10 +50,41 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
     console.log('Press Ctrl+C to stop');
 
     await new Promise<void>((resolve) => {
-      const shutdown = () => {
-        draftsDb.close();
-        server.close(() => resolve());
+      let shuttingDown = false;
+
+      const finishShutdown = (): void => {
+        closeAllDocsEventStreams();
+        destroyUiServerConnections(server);
+        try {
+          draftsDb.close();
+        } catch {
+          // ignore close errors during shutdown
+        }
+        server.close(() => {
+          resolve();
+        });
       };
+
+      const shutdown = (): void => {
+        if (shuttingDown) {
+          console.log('\nForce exit.');
+          process.exit(1);
+          return;
+        }
+        shuttingDown = true;
+        console.log('\nShutting down...');
+
+        const forceTimer = setTimeout(() => {
+          finishShutdown();
+        }, 2_000);
+        forceTimer.unref();
+
+        void docsWatcher.stop().finally(() => {
+          clearTimeout(forceTimer);
+          finishShutdown();
+        });
+      };
+
       process.on('SIGINT', shutdown);
       process.on('SIGTERM', shutdown);
     });

@@ -1,9 +1,7 @@
 import fs from 'node:fs';
 import type { DocIndex } from '../index/doc-index.js';
-import { TYPE_TO_DIR } from '../index/types.js';
-import { resolveDocPath } from '../index/slug.js';
 import type { DraftRow } from './db/drafts-db.js';
-import { buildMarkdownFromDraft } from './publish.js';
+import { buildMarkdownFromDraft, resolvePublishTargetPath } from './publish.js';
 
 export interface DraftDiffResult {
   targetPath: string | null;
@@ -17,8 +15,7 @@ export function computeDraftDiff(index: DocIndex, draft: DraftRow): DraftDiffRes
     return { targetPath: null, isNew: true, diff: buildMarkdownFromDraft(draft) };
   }
 
-  const typeDir = TYPE_TO_DIR[draft.type];
-  const targetPath = resolveDocPath(knowledgeRoot, typeDir, draft.slug);
+  const targetPath = resolvePublishTargetPath(index, draft);
   const proposed = buildMarkdownFromDraft(draft);
 
   if (!targetPath || !fs.existsSync(targetPath)) {

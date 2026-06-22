@@ -1,4 +1,4 @@
-import { CATALOG_ORDER, catalogIconLetter, catalogLabel, groupDocsByCatalog } from './catalog.js';
+import { CATALOG_ORDER, catalogIconLetter, catalogLabel, groupDocsByCatalog, type CatalogSubfolder } from './catalog.js';
 import type { Draft, ListDocsItem } from './api.js';
 
 export interface SidebarCallbacks {
@@ -55,53 +55,107 @@ export function renderSidebar(
   let activeSlug: string | null = null;
   let activeDraftId: string | null = null;
 
+  function appendDocItem(listEl: HTMLElement, doc: ListDocsItem): void {
+    const li = document.createElement('li');
+    li.className = 'page-item';
+    if (doc.slug === activeSlug) {
+      li.classList.add('active');
+    }
+    li.dataset.slug = doc.slug;
+    const statusChip =
+      doc.status !== 'accepted'
+        ? `<span class="status-chip status-${doc.status}">${doc.status}</span>`
+        : '';
+    const pathHint =
+      doc.type === 'wiki-page' && doc.relativePath.includes('/')
+        ? `<span class="page-path">${doc.relativePath.replace(/\.md$/i, '')}</span>`
+        : '';
+    li.innerHTML = `
+      <span class="catalog-icon catalog-icon--${doc.type} catalog-icon--sm" aria-hidden="true">${catalogIconLetter(doc.type)}</span>
+      <span class="page-item-text">
+        <span class="page-title">${doc.title}</span>
+        ${pathHint}
+      </span>
+      ${statusChip}
+    `;
+    li.addEventListener('click', () => {
+      activeSlug = doc.slug;
+      activeDraftId = null;
+      renderCatalogTree();
+      renderDrafts();
+      callbacks.onSelectSlug(doc.slug);
+    });
+    listEl.appendChild(li);
+  }
+
+  function appendSubfolder(parentEl: HTMLElement, subfolder: CatalogSubfolder, parentExpanded: boolean): void {
+    const subKey = `subfolder:${subfolder.path}`;
+    const isOpen = parentExpanded && (expanded.has(subKey) || expanded.size === 0);
+    const block = document.createElement('li');
+    block.className = 'catalog-subfolder';
+    block.innerHTML = `
+      <button type="button" class="catalog-subheader" data-subfolder="${subfolder.path}" aria-expanded="${isOpen}">
+        <span class="catalog-chevron" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>
+        <span class="catalog-label">${subfolder.label}</span>
+        <span class="catalog-count">${subfolder.docs.length}</span>
+      </button>
+      <ul class="catalog-pages catalog-pages--nested${isOpen ? '' : ' hidden'}"></ul>
+    `;
+    const listEl = block.querySelector<HTMLUListElement>('.catalog-pages')!;
+    for (const doc of subfolder.docs) {
+      appendDocItem(listEl, doc);
+    }
+    block.querySelector<HTMLButtonElement>('.catalog-subheader')?.addEventListener('click', (event) => {
+      event.stopPropagation();
+      if (expanded.has(subKey)) {
+        expanded.delete(subKey);
+      } else {
+        expanded.add(subKey);
+      }
+      saveExpanded(expanded);
+      renderCatalogTree();
+    });
+    parentEl.appendChild(block);
+  }
+
   function renderCatalogTree(): void {
     const groups = groupDocsByCatalog(docs);
     treeEl.innerHTML = '';
 
     for (const group of groups) {
-      const isOpen = expanded.has(group.type);
+      const isOpen = expanded.has(group.type) || expanded.size === 0;
       const section = document.createElement('section');
       section.className = 'catalog-section';
+      const totalCount =
+        group.docs.length +
+        (group.subfolders?.reduce((sum, folder) => sum + folder.docs.length, 0) ?? 0);
       section.innerHTML = `
         <button type="button" class="catalog-header" data-catalog="${group.type}" aria-expanded="${isOpen}">
           <span class="catalog-chevron" aria-hidden="true">${isOpen ? '▾' : '▸'}</span>
-          <span class="catalog-icon catalog-icon--${group.type}" aria-hidden="true">${catalogIconLetter(group.type)}</span>
+          <span class="catalog-icon catalog-icon--${group.type.startsWith('folder:') ? 'folder' : group.type}" aria-hidden="true">${catalogIconLetter(group.type)}</span>
           <span class="catalog-label">${group.label}</span>
-          <span class="catalog-count">${group.docs.length}</span>
+          <span class="catalog-count">${totalCount}</span>
         </button>
         <ul class="catalog-pages${isOpen ? '' : ' hidden'}"></ul>
       `;
 
       const listEl = section.querySelector<HTMLUListElement>('.catalog-pages')!;
       for (const doc of group.docs) {
-        const li = document.createElement('li');
-        li.className = 'page-item';
-        if (doc.slug === activeSlug) {
-          li.classList.add('active');
+        appendDocItem(listEl, doc);
+      }
+      if (group.subfolders) {
+        for (const subfolder of group.subfolders) {
+          appendSubfolder(listEl, subfolder, isOpen);
         }
-        li.dataset.slug = doc.slug;
-        const statusChip =
-          doc.status !== 'accepted'
-            ? `<span class="status-chip status-${doc.status}">${doc.status}</span>`
-            : '';
-        li.innerHTML = `
-          <span class="catalog-icon catalog-icon--${doc.type} catalog-icon--sm" aria-hidden="true">${catalogIconLetter(doc.type)}</span>
-          <span class="page-title">${doc.title}</span>
-          ${statusChip}
-        `;
-        li.addEventListener('click', () => {
-          activeSlug = doc.slug;
-          activeDraftId = null;
-          renderCatalogTree();
-          renderDrafts();
-          callbacks.onSelectSlug(doc.slug);
-        });
-        listEl.appendChild(li);
       }
 
       section.querySelector<HTMLButtonElement>('.catalog-header')?.addEventListener('click', () => {
         const catalog = group.type;
+        if (expanded.size === 0) {
+          for (const g of groups) {
+            expanded.add(g.type);
+          }
+        }
         if (expanded.has(catalog)) {
           expanded.delete(catalog);
         } else {
@@ -163,7 +217,14 @@ export function renderSidebar(
     activeDraftId = null;
     const doc = docs.find((d) => d.slug === slug);
     if (doc) {
-      expanded.add(doc.type);
+      if (doc.type === 'wiki-page') {
+        const top = doc.relativePath.includes('/')
+          ? `folder:${doc.relativePath.split('/')[0]}`
+          : 'folder:__root__';
+        expanded.add(top);
+      } else {
+        expanded.add(doc.type);
+      }
       saveExpanded(expanded);
     }
     renderCatalogTree();

@@ -12,6 +12,8 @@ export interface ListDocsItem {
   type: DocType;
   title: string;
   status: DocStatus;
+  relativePath: string;
+  contentKind: DocRecord['contentKind'];
 }
 
 export function listDocs(index: DocIndex, input: ListDocsInput = {}): ListDocsItem[] {
@@ -40,6 +42,8 @@ export function listDocs(index: DocIndex, input: ListDocsInput = {}): ListDocsIt
     type: doc.type,
     title: doc.title,
     status: doc.status,
+    relativePath: doc.relativePath,
+    contentKind: doc.contentKind,
   }));
 }
 

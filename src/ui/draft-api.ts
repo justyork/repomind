@@ -3,7 +3,11 @@ import type { DocIndex } from '../index/doc-index.js';
 import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
-import { prepareDocFile } from '../prepare/prepare-docs.js';
+import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
+import { createFolder, createPageFile, deleteFolder, deletePageFile, movePageFile, renamePageFile } from './fs-operations.js';
+import { listPageTemplates } from './templates.js';
+import { prepareDocFile, prepareAllDocs } from '../prepare/prepare-docs.js';
+import { syncAllDocLinks } from '../prepare/auto-links.js';
 import { getDoc } from '../tools/get-doc.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { computeDraftDiff } from './diff.js';
@@ -55,6 +59,169 @@ export function handleDraftApi(
     return { status: 200, body: { ok: true, path: 'agents.md' } };
   }
 
+  if (pathname === '/api/catalog-meta' && method === 'PUT') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const folderPath = typeof body.path === 'string' ? body.path : '';
+    const emoji = typeof body.emoji === 'string' ? body.emoji : '';
+    const knowledgeRoot = index.getKnowledgeRoot();
+    if (!knowledgeRoot) {
+      return jsonError(404, 'no docs/ directory found');
+    }
+    const meta = writeCatalogEmoji(knowledgeRoot, folderPath, emoji);
+    return { status: 200, body: { meta } };
+  }
+
+  if (pathname === '/api/fs/folder' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const parentPath = typeof body.parentPath === 'string' ? body.parentPath : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    try {
+      const result = createFolder(index, parentPath, name);
+      return { status: 201, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/page' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const parentPath = typeof body.parentPath === 'string' ? body.parentPath : '';
+    const name = typeof body.name === 'string' ? body.name : '';
+    const title = typeof body.title === 'string' ? body.title : undefined;
+    const templateId = typeof body.templateId === 'string' ? body.templateId : undefined;
+    if (!db) {
+      return jsonError(503, 'drafts database unavailable');
+    }
+    try {
+      const page = createPageFile(index, parentPath, name, { title, templateId });
+      const existing = db.getActiveBySlug(page.slug);
+      if (existing) {
+        return { status: 200, body: { page, draft: existing } };
+      }
+      const doc = getDoc(index, page.slug);
+      const tags = Array.isArray(doc.frontmatter?.tags)
+        ? doc.frontmatter.tags.filter((tag): tag is string => typeof tag === 'string')
+        : [];
+      const related = Array.isArray(doc.frontmatter?.related)
+        ? doc.frontmatter.related.filter((item): item is string => typeof item === 'string')
+        : [];
+      const draft = db.create({
+        slug: page.slug,
+        type: page.type,
+        title: typeof doc.frontmatter?.title === 'string' ? doc.frontmatter.title : page.slug,
+        body: doc.body ?? '',
+        tags,
+        related,
+        target_path: page.relativePath,
+      });
+      return { status: 201, body: { page, draft } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/move' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const fromPath = typeof body.fromPath === 'string' ? body.fromPath : '';
+    const toDir = typeof body.toDir === 'string' ? body.toDir : '';
+    try {
+      const result = movePageFile(index, fromPath, toDir);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/rename' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const pagePath = typeof body.path === 'string' ? body.path : '';
+    const newName = typeof body.newName === 'string' ? body.newName : '';
+    try {
+      const result = renamePageFile(index, pagePath, newName);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/delete' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const targetPath = typeof body.path === 'string' ? body.path : '';
+    const kind = body.kind === 'folder' ? 'folder' : body.kind === 'page' ? 'page' : null;
+    if (!kind) {
+      return jsonError(400, 'kind must be "page" or "folder"');
+    }
+    try {
+      const result =
+        kind === 'page' ? deletePageFile(index, targetPath) : deleteFolder(index, targetPath);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/drafts/open' && method === 'POST') {
+    if (!db) {
+      return jsonError(503, 'drafts database unavailable');
+    }
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const slug = typeof body.slug === 'string' ? body.slug : '';
+    if (!isValidSlug(slug)) {
+      return jsonError(400, `invalid slug: ${slug}`);
+    }
+    const existing = db.getActiveBySlug(slug);
+    if (existing) {
+      return { status: 200, body: { draft: existing } };
+    }
+    const doc = getDoc(index, slug);
+    if (!doc.found || !doc.slug || !doc.frontmatter) {
+      return jsonError(404, `document not found: ${slug}`);
+    }
+    const docRecord = index.getDocBySlug(slug);
+    try {
+      const draft = db.create({
+        slug: doc.slug,
+        type: doc.frontmatter.type,
+        title: doc.frontmatter.title ?? doc.slug,
+        body: doc.body ?? '',
+        tags: doc.frontmatter.tags ?? [],
+        related: doc.frontmatter.related ?? [],
+        forked_from: doc.slug,
+        target_path: docRecord?.relativePath ?? null,
+      });
+      return { status: 201, body: { draft } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(409, message);
+    }
+  }
+
   if (pathname === '/api/prepare' && method === 'POST') {
     const body = parseJsonBody(bodyRaw);
     if (body === null) {
@@ -90,6 +257,28 @@ export function handleDraftApi(
       const message = error instanceof Error ? error.message : String(error);
       return jsonError(400, message);
     }
+  }
+
+  if (pathname === '/api/prepare-all' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    const dryRun = body !== null && body.dryRun === true;
+    const result = prepareAllDocs(index, { dryRun });
+    return { status: 200, body: { result, dryRun } };
+  }
+
+  if (pathname === '/api/sync-links' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    const dryRun = body !== null && body.dryRun === true;
+    const convertMarkdownLinks =
+      body === null || body.convertBody === undefined ? true : body.convertBody === true;
+    const syncRelated =
+      body === null || body.syncRelated === undefined ? true : body.syncRelated === true;
+    const result = syncAllDocLinks(index, {
+      dryRun,
+      convertMarkdownLinks,
+      syncRelated,
+    });
+    return { status: 200, body: { result, dryRun } };
   }
 
   if (!db) {
@@ -136,6 +325,7 @@ export function handleDraftApi(
       if (!doc.found || !doc.slug || !doc.frontmatter) {
         return jsonError(404, `document not found: ${forkFrom}`);
       }
+      const docRecord = index.getDocBySlug(forkFrom);
       try {
         const draft = db.create({
           slug: doc.slug,
@@ -145,6 +335,7 @@ export function handleDraftApi(
           tags: doc.frontmatter.tags ?? [],
           related: doc.frontmatter.related ?? [],
           forked_from: doc.slug,
+          target_path: docRecord?.relativePath ?? null,
         });
         return { status: 201, body: { draft } };
       } catch (error: unknown) {

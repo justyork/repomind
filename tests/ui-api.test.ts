@@ -51,7 +51,7 @@ title: Convoy Rules
 related:
   - caravan
 ---
-Rules for convoy movement.
+Rules for convoy movement. See [[caravan]] for glossary.
 `,
   );
 }
@@ -78,6 +78,42 @@ function fetchJson(
         });
       });
     }).on('error', reject);
+  });
+}
+
+function postJson(
+  port: number,
+  pathname: string,
+  payload: Record<string, string>,
+): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode ?? 0,
+            body: text ? JSON.parse(text) : null,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
   });
 }
 
@@ -148,6 +184,64 @@ describe('UI HTTP API', () => {
       expect(graph.status).toBe(200);
       const graphBody = graph.body as { nodes: unknown[] };
       expect(graphBody.nodes.length).toBe(2);
+
+      const backlinks = await fetchJson(port, '/api/backlinks/caravan');
+      expect(backlinks.status).toBe(200);
+      const backlinksBody = backlinks.body as { backlinks: { slug: string; kind: string }[] };
+      expect(backlinksBody.backlinks.some((b) => b.slug === 'convoy-rules')).toBe(true);
+
+      const linkHealth = await fetchJson(port, '/api/link-health');
+      expect(linkHealth.status).toBe(200);
+
+      const moved = await postJson(port, '/api/fs/move', {
+        fromPath: 'specs/convoy-rules.md',
+        toDir: 'glossary',
+      });
+      expect(moved.status).toBe(200);
+      const movedBody = moved.body as { result: { relativePath: string } };
+      expect(movedBody.result.relativePath).toBe('glossary/convoy-rules.md');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
+  it('serves image assets from docs/', async () => {
+    const repo = makeTempDir();
+    fixtureKnowledge(repo);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z5BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const assetPath = path.join(repo, 'docs/assets/logo.png');
+    fs.mkdirSync(path.dirname(assetPath), { recursive: true });
+    fs.writeFileSync(assetPath, png);
+
+    const index = new DocIndex(repo);
+    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-mind-static-'));
+    const server = createUiServer({ port: 0, index, staticDir, host: '127.0.0.1' });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('no port');
+    }
+    const port = addr.port;
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/assets/assets/logo.png`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      const body = Buffer.from(await res.arrayBuffer());
+      expect(body.equals(png)).toBe(true);
+
+      const missing = await fetch(`http://127.0.0.1:${port}/api/assets/assets/missing.png`);
+      expect(missing.status).toBe(404);
+
+      const notImage = await fetch(`http://127.0.0.1:${port}/api/assets/glossary/caravan.md`);
+      expect(notImage.status).toBe(400);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(staticDir, { recursive: true, force: true });
