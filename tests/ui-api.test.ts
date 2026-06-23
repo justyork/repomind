@@ -84,7 +84,7 @@ function fetchJson(
 function postJson(
   port: number,
   pathname: string,
-  payload: Record<string, string>,
+  payload: Record<string, unknown>,
 ): Promise<{ status: number; body: unknown }> {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
@@ -115,6 +115,50 @@ function postJson(
     req.write(body);
     req.end();
   });
+}
+
+function putJson(
+  port: number,
+  pathname: string,
+  payload: Record<string, unknown>,
+): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: pathname,
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode ?? 0,
+            body: text ? JSON.parse(text) : null,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+function postJsonLegacy(
+  port: number,
+  pathname: string,
+  payload: Record<string, string>,
+): Promise<{ status: number; body: unknown }> {
+  return postJson(port, pathname, payload);
 }
 
 function buildMultipartUpload(
@@ -247,7 +291,7 @@ describe('UI HTTP API', () => {
       const linkHealth = await fetchJson(port, '/api/link-health');
       expect(linkHealth.status).toBe(200);
 
-      const moved = await postJson(port, '/api/fs/move', {
+      const moved = await postJsonLegacy(port, '/api/fs/move', {
         fromPath: 'specs/convoy-rules.md',
         toDir: 'glossary',
       });
@@ -394,6 +438,58 @@ related:
       const diffBody = diff.body as { isNew: boolean; diff: string };
       expect(diffBody.isNew).toBe(true);
       expect(diffBody.diff).toContain('Draft body');
+    } finally {
+      db.close();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
+  it('publishes draft with wikilink body via API', async () => {
+    const repo = makeTempDir();
+    fixtureKnowledge(repo);
+    const index = new DocIndex(repo);
+    const db = openDraftsDb(index.getKnowledgeRoot()!);
+    const draft = db.create({
+      slug: 'visual-publish-test',
+      type: 'glossary-term',
+      title: 'Visual publish test',
+      body: 'See [[caravan]] for details.',
+      related: ['caravan'],
+    });
+
+    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-mind-static-'));
+    const server = createUiServer({ port: 0, index, staticDir, host: '127.0.0.1', draftsDb: db });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('no port');
+    }
+    const port = addr.port;
+
+    try {
+      const updated = await putJson(port, `/api/drafts/${encodeURIComponent(draft.id)}`, {
+        body: 'Updated via API. Link: [[caravan]].',
+        title: 'Visual publish test',
+        slug: 'visual-publish-test',
+        type: 'glossary-term',
+        status: 'accepted',
+        tags: ['test'],
+        related: ['caravan'],
+      });
+      expect(updated.status).toBe(200);
+
+      const published = await postJson(port, `/api/drafts/${encodeURIComponent(draft.id)}/publish`, {});
+      expect(published.status).toBe(200);
+      const publishedBody = published.body as { result: { path: string } };
+      const filePath = publishedBody.result.path;
+      expect(fs.existsSync(filePath)).toBe(true);
+      const markdown = fs.readFileSync(filePath, 'utf8');
+      expect(markdown).toContain('[[caravan]]');
+      expect(markdown).toContain('title: Visual publish test');
     } finally {
       db.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));

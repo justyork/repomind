@@ -24,13 +24,13 @@ updated: 2026-06-23
 ```bash
 cd ~/www/GAMEDEV/skyforge-caravan
 # Ensure docs/ exists and is indexed (migrate from .project-knowledge/ if needed)
-npx repo-mind prepare --all --dry-run   # preview legacy md
-npx repo-mind prepare --all             # add frontmatter where missing
-npx repo-mind sync-links --dry-run
-npx repo-mind sync-links
-npx repo-mind check
-npx repo-mind setup --cursor            # or --claude
-npx repo-mind ui                        # http://127.0.0.1:3847
+npx @justyork/repo-mind prepare --all --dry-run   # preview legacy md
+npx @justyork/repo-mind prepare --all             # add frontmatter where missing
+npx @justyork/repo-mind sync-links --dry-run
+npx @justyork/repo-mind sync-links
+npx @justyork/repo-mind check
+npx @justyork/repo-mind setup --cursor            # or --claude
+npx @justyork/repo-mind ui                        # http://127.0.0.1:3847
 ```
 
 Record versions:
@@ -62,8 +62,12 @@ Record versions:
 
 ### Editor & drafts
 
-- [ ] **Draft → publish** — create draft, edit, publish to `docs/*.md`; appears in tree
-- [ ] **Related suggest** — on publish, related slug suggestions appear (accept or dismiss)
+- [ ] **Draft → publish** — create draft, edit in WYSIWYG canvas, publish to `docs/*.md`; appears in tree
+- [ ] **WYSIWYG** — bold, headings, lists, `[[wikilinks]]` survive publish (verify in reader + `get_doc`)
+- [ ] **Publish now** — primary Publish without modal; Review changes via Publish ▾ optional
+- [ ] **Properties chips** — status, tags, related editable in rail; autosave works
+- [ ] **Slash menu** — `/h2`, `/bullet`, `/todo` insert blocks in canvas
+- [ ] **Related suggest** — on publish review, related slug suggestions appear (accept or dismiss)
 - [ ] **Prepare** — `repo-mind prepare` on a legacy md file adds schema without data loss
 
 ### Migration & health
@@ -88,10 +92,10 @@ Ask the agent **three real project questions** (combat, caravan lore, architectu
 
 ## P1 — log if failing (not blocking exit)
 
-- [ ] Domain labels visible at tree root (until E1 ships: note "folders only")
-- [ ] Keyboard shortcuts (`j`/`k`, `/`, `e`) — defer to v4.1 if missing
-- [ ] Image upload in editor — defer to v4.1 if missing
-- [ ] Editor layout matches reader chrome (breadcrumb + rail)
+- [x] Domain labels visible at tree root (E1, 0.2.0)
+- [x] Keyboard shortcuts (`j`/`k`, `/`, `e`) (E2, 0.3.0)
+- [x] Image upload in editor (E3, 0.3.0)
+- [x] Editor layout matches reader chrome (E6b PageShell, 0.4.1)
 - [ ] Type icons in catalog tree
 
 ## Daily log (1 week)

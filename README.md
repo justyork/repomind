@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.3.0** — keyboard nav, image upload, domain labels, yaml/json reader, `ab-demo` harness. Confluence-style UI, wikilinks, deep links (`?slug=`), prepare/sync-links.
+**v0.4.1** — visual WYSIWYG editor (TipTap), PageShell reader/editor chrome, properties chips, slash menu. Keyboard nav, image upload, domain labels, `ab-demo` harness.
 
 | Artifact | Location |
 |----------|----------|
