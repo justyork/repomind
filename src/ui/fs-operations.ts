@@ -3,9 +3,9 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import type { DocIndex } from '../index/doc-index.js';
 import { getBacklinksForSlug } from '../index/link-index.js';
+import { inferTypeFromRelative, resolveDomain } from '../index/path-inference.js';
 import { slugFromRelativePath } from '../index/slug.js';
 import type { DocType } from '../index/types.js';
-import { DIR_TO_TYPE } from '../index/types.js';
 import { buildLinkIndexForDocs } from '../tools/explore-graph.js';
 import { readPageTemplate } from './templates.js';
 import {
@@ -60,8 +60,7 @@ export interface CreatePageOptions {
 }
 
 function inferTypeFromParent(parentPath: string): DocType {
-  const top = parentPath.split('/')[0] ?? '';
-  return DIR_TO_TYPE[top] ?? 'wiki-page';
+  return inferTypeFromRelative(`${parentPath}/page.md`);
 }
 
 export function createFolder(
@@ -115,8 +114,10 @@ export function createPageFile(
     throw new Error(`already exists: ${relativePath}`);
   }
 
+  const relativeNorm = normalizeRelativePath(relativePath);
   const type = inferTypeFromParent(parentPath);
-  const slug = slugFromRelativePath(relativePath);
+  const slug = slugFromRelativePath(relativeNorm);
+  const domain = resolveDomain(relativeNorm, undefined);
   const pageTitle = options.title?.trim() || baseName.replace(/[-_]/g, ' ');
 
   let body = `# ${pageTitle}\n\n`;
@@ -133,6 +134,7 @@ export function createPageFile(
     type,
     slug,
     status: 'draft',
+    domain,
     title: resolvedTitle,
     tags: [],
     related: [],

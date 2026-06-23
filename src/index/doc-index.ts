@@ -3,9 +3,9 @@ import path from 'node:path';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
 import { contentKindFromRelativePath } from './knowledge-file.js';
+import { inferTypeFromRelative, resolveDomain } from './path-inference.js';
 import { isValidSlug, slugFromRelativePath } from './slug.js';
 import {
-  DIR_TO_TYPE,
   type DocFrontmatter,
   type DocRecord,
   type DocStatus,
@@ -48,17 +48,6 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string');
 }
 
-function inferTypeFromRelative(relative: string): DocType {
-  const [typeDir] = relative.split(path.sep);
-  return DIR_TO_TYPE[typeDir ?? ''] ?? 'wiki-page';
-}
-
-function titleFromBasename(basename: string): string {
-  return basename
-    .replace(/[-_]/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function inferSlug(relative: string, data: Record<string, unknown>, inferredType: DocType): string {
   if (typeof data.slug === 'string' && isValidSlug(data.slug)) {
     return data.slug;
@@ -72,6 +61,33 @@ function inferSlug(relative: string, data: Record<string, unknown>, inferredType
   return slugFromRelativePath(relative);
 }
 
+function titleFromBasename(basename: string): string {
+  return basename
+    .replace(/[-_]/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function buildFrontmatter(
+  relativeNorm: string,
+  data: Record<string, unknown>,
+  type: DocType,
+  slug: string,
+  status: DocStatus,
+  title: string,
+): DocFrontmatter {
+  return {
+    type,
+    slug,
+    status,
+    domain: resolveDomain(relativeNorm, data.domain),
+    title,
+    tags: normalizeStringArray(data.tags),
+    related: normalizeStringArray(data.related),
+    owner: typeof data.owner === 'string' ? data.owner : undefined,
+    updated: typeof data.updated === 'string' ? data.updated : undefined,
+  };
+}
+
 function parseStructuredFile(
   filePath: string,
   knowledgeRoot: string,
@@ -83,11 +99,13 @@ function parseStructuredFile(
   const slug = slugFromRelativePath(relative);
   const basename = path.basename(relative).replace(/\.(ya?ml|json)$/i, '');
   const title = titleFromBasename(basename);
+  const domain = resolveDomain(relative, undefined);
 
   const frontmatter: DocFrontmatter = {
     type: inferredType,
     slug,
     status: 'accepted',
+    domain,
     title,
     tags: [],
     related: [],
@@ -98,6 +116,7 @@ function parseStructuredFile(
     relativePath: relative,
     slug,
     type: inferredType,
+    domain,
     status: 'accepted',
     title,
     tags: [],
@@ -128,9 +147,10 @@ function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
   const data = parsed.data as Record<string, unknown>;
 
   const relative = path.relative(knowledgeRoot, filePath);
-  const inferredType = inferTypeFromRelative(relative);
+  const relativeNorm = relative.replace(/\\/g, '/');
+  const inferredType = inferTypeFromRelative(relativeNorm);
   const type = isDocType(data.type) ? data.type : inferredType;
-  const slug = inferSlug(relative, data, type);
+  const slug = inferSlug(relativeNorm, data, type);
   const status: DocStatus = isDocStatus(data.status) ? data.status : 'accepted';
   const title =
     typeof data.title === 'string'
@@ -139,22 +159,14 @@ function parseDoc(filePath: string, knowledgeRoot: string): DocRecord | null {
 
   const prepared = typeof data.type === 'string' && isDocType(data.type);
 
-  const frontmatter: DocFrontmatter = {
-    type,
-    slug,
-    status,
-    title,
-    tags: normalizeStringArray(data.tags),
-    related: normalizeStringArray(data.related),
-    owner: typeof data.owner === 'string' ? data.owner : undefined,
-    updated: typeof data.updated === 'string' ? data.updated : undefined,
-  };
+  const frontmatter = buildFrontmatter(relativeNorm, data, type, slug, status, title);
 
   return {
     path: filePath,
-    relativePath: relative.replace(/\\/g, '/'),
+    relativePath: relativeNorm,
     slug,
     type,
+    domain: frontmatter.domain ?? resolveDomain(relativeNorm, undefined),
     status,
     title,
     tags: frontmatter.tags ?? [],

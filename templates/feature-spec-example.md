@@ -1,5 +1,6 @@
 ---
 type: feature-spec
+domain: technical
 slug: user-authentication
 status: proposed
 title: User Authentication

@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "combat-turn-order",
+      "prompt": "In what order do combatants act each round in the Caravan combat system?",
+      "anchorSlugs": ["combat-system"],
+      "tags": ["factual", "game-design"]
+    },
+    {
+      "id": "stamina-regen",
+      "prompt": "How does stamina regenerate outside of combat?",
+      "anchorSlugs": ["stamina"],
+      "tags": ["factual", "glossary"]
+    },
+    {
+      "id": "mcp-transport",
+      "prompt": "Why does RepoMind expose MCP over stdio instead of HTTP?",
+      "anchorSlugs": ["mcp-stdio"],
+      "tags": ["factual", "adr"]
+    },
+    {
+      "id": "roadmap-next",
+      "prompt": "What is the next product milestone after the combat prototype?",
+      "anchorSlugs": ["product-roadmap"],
+      "tags": ["factual", "product"]
+    },
+    {
+      "id": "save-slots",
+      "prompt": "How many save slots does the game support and where are saves stored?",
+      "anchorSlugs": ["save-system"],
+      "tags": ["factual", "technical"]
+    },
+    {
+      "id": "session-ttl",
+      "prompt": "How long do user authentication sessions last?",
+      "anchorSlugs": ["user-authentication"],
+      "tags": ["factual", "technical"]
+    },
+    {
+      "id": "search-ranking-open",
+      "prompt": "What is still undecided about search ranking in RepoMind?",
+      "anchorSlugs": ["search-ranking"],
+      "tags": ["synthesis", "open-question"]
+    },
+    {
+      "id": "caravan-definition",
+      "prompt": "What is a caravan in the game world?",
+      "anchorSlugs": ["caravan"],
+      "tags": ["factual", "glossary"]
+    }
+  ]
+}

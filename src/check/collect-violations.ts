@@ -3,10 +3,13 @@ import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
 import { resolveAssetRelativePath } from '../index/resolve-asset-href.js';
 import { parseWikilinkTargets, resolveWikilinkTarget } from '../index/link-index.js';
+import { domainFromPath } from '../index/path-inference.js';
 import { assetExists } from '../ui/serve-asset.js';
 import {
+  DOC_DOMAINS,
   DOC_STATUSES,
   DOC_TYPES,
+  isDocDomain,
   isDocStatus,
   isDocType,
 } from '../index/types.js';
@@ -55,6 +58,25 @@ export function collectCheckReport(index: DocIndex): CheckReport | null {
 
     if (!doc.slug) {
       violations.push({ path: doc.path, message: 'missing slug in frontmatter' });
+    }
+
+    if (doc.prepared && doc.frontmatter.domain !== undefined && !isDocDomain(doc.frontmatter.domain)) {
+      violations.push({
+        path: doc.path,
+        message: `invalid domain "${String(doc.frontmatter.domain)}" — expected one of: ${DOC_DOMAINS.join(', ')}`,
+      });
+    }
+
+    if (
+      doc.prepared &&
+      doc.frontmatter.domain !== undefined &&
+      isDocDomain(doc.frontmatter.domain) &&
+      doc.frontmatter.domain !== domainFromPath(doc.relativePath) &&
+      domainFromPath(doc.relativePath) !== 'shared'
+    ) {
+      warnings.push(
+        `domain "${doc.frontmatter.domain}" in frontmatter does not match path domain "${domainFromPath(doc.relativePath)}" (${doc.relativePath})`,
+      );
     }
 
     for (const related of doc.related) {

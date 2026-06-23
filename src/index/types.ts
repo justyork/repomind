@@ -20,6 +20,43 @@ export type DocStatus = (typeof DOC_STATUSES)[number];
 
 export type ContentKind = 'markdown' | 'yaml' | 'json';
 
+/** Business area / documentation domain (orthogonal to doc `type`). */
+export const DOC_DOMAINS = [
+  'product',
+  'technical',
+  'game-design',
+  'analytics',
+  'art',
+  'narrative',
+  'ops',
+  'shared',
+] as const;
+
+export type DocDomain = (typeof DOC_DOMAINS)[number];
+
+export const DOMAIN_LABELS: Record<DocDomain, string> = {
+  product: 'Product',
+  technical: 'Technical',
+  'game-design': 'Game design',
+  analytics: 'Analytics',
+  art: 'Art',
+  narrative: 'Narrative',
+  ops: 'Operations',
+  shared: 'Shared',
+};
+
+/** Default type subfolders created under each domain by `repo-mind init`. */
+export const DOMAIN_TYPE_DIRS: Record<DocDomain, readonly string[]> = {
+  product: ['specs', 'wiki', 'open-questions'],
+  technical: ['adr', 'specs', 'glossary', 'wiki'],
+  'game-design': ['specs', 'glossary', 'wiki'],
+  analytics: ['specs', 'wiki'],
+  art: ['wiki', 'specs'],
+  narrative: ['wiki', 'specs'],
+  ops: ['specs', 'wiki'],
+  shared: ['agents', 'glossary', 'wiki'],
+};
+
 export const TYPE_TO_DIR: Record<DocType, string> = {
   adr: 'adr',
   'feature-spec': 'specs',
@@ -42,6 +79,8 @@ export interface DocFrontmatter {
   type: DocType;
   slug: string;
   status: DocStatus;
+  /** Documentation domain — product, technical, game-design, etc. */
+  domain?: DocDomain;
   title?: string;
   tags?: string[];
   related?: string[];
@@ -54,6 +93,7 @@ export interface DocRecord {
   relativePath: string;
   slug: string;
   type: DocType;
+  domain: DocDomain;
   status: DocStatus;
   title: string;
   tags: string[];
@@ -71,4 +111,8 @@ export function isDocType(value: unknown): value is DocType {
 
 export function isDocStatus(value: unknown): value is DocStatus {
   return typeof value === 'string' && (DOC_STATUSES as readonly string[]).includes(value);
+}
+
+export function isDocDomain(value: unknown): value is DocDomain {
+  return typeof value === 'string' && (DOC_DOMAINS as readonly string[]).includes(value);
 }

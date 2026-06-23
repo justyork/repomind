@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import matter from 'gray-matter';
 import type { DocIndex } from '../index/doc-index.js';
+import { inferTypeFromRelative, resolveDomain } from '../index/path-inference.js';
 import { isValidSlug, slugFromRelativePath } from '../index/slug.js';
-import { DIR_TO_TYPE, isDocType, type DocStatus, type DocType } from '../index/types.js';
+import { isDocType, type DocDomain, type DocStatus, type DocType } from '../index/types.js';
 
 export interface UnpreparedFile {
   relativePath: string;
@@ -18,6 +19,7 @@ export interface PrepareOptions {
   slug?: string;
   title?: string;
   status?: DocStatus;
+  domain?: DocDomain;
 }
 
 export interface PrepareResult {
@@ -25,11 +27,7 @@ export interface PrepareResult {
   relativePath: string;
   slug: string;
   type: DocType;
-}
-
-function inferTypeFromRelative(relative: string): DocType {
-  const [typeDir] = relative.split('/');
-  return DIR_TO_TYPE[typeDir ?? ''] ?? 'wiki-page';
+  domain: DocDomain;
 }
 
 function titleFromSlug(slug: string): string {
@@ -78,6 +76,7 @@ export function prepareDocFile(
   }
 
   const inferredType = options.type ?? inferTypeFromRelative(normalized);
+  const domain = options.domain ?? resolveDomain(normalized, data.domain);
   const slug =
     options.slug ??
     (typeof data.slug === 'string' && isValidSlug(data.slug)
@@ -92,6 +91,7 @@ export function prepareDocFile(
     type: inferredType,
     slug,
     status,
+    domain,
     title,
     tags: Array.isArray(data.tags)
       ? data.tags.filter((item): item is string => typeof item === 'string')
@@ -111,6 +111,7 @@ export function prepareDocFile(
     relativePath: normalized,
     slug,
     type: inferredType,
+    domain,
   };
 }
 
@@ -138,6 +139,7 @@ export function prepareAllDocs(
         relativePath: file.relativePath,
         slug: file.suggestedSlug,
         type: file.suggestedType,
+        domain: resolveDomain(file.relativePath, undefined),
       });
       continue;
     }

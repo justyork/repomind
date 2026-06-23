@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { DocIndex } from '../index/doc-index.js';
 import { isKnowledgeFileName } from '../index/knowledge-file.js';
 import type { LinkEdge } from '../index/link-index.js';
+import { DOC_DOMAINS, DOMAIN_LABELS, type DocDomain } from '../index/types.js';
 import { catalogEmoji, readCatalogMeta } from './catalog-meta.js';
 import { joinRelativePath, normalizeRelativePath } from './safe-path.js';
 
@@ -58,6 +59,22 @@ export function readmeIndexRelativePath(folderRelativePath: string): string {
   return base ? `${base}/README.md` : 'README.md';
 }
 
+function isDocDomain(name: string): name is DocDomain {
+  return (DOC_DOMAINS as readonly string[]).includes(name);
+}
+
+/** Human label for domain folders at `docs/{domain}/`; otherwise basename. */
+export function folderDisplayName(relativePath: string): string {
+  if (!relativePath) {
+    return 'Knowledge';
+  }
+  const segments = normalizeRelativePath(relativePath).split('/').filter(Boolean);
+  if (segments.length === 1 && isDocDomain(segments[0]!)) {
+    return DOMAIN_LABELS[segments[0]];
+  }
+  return path.basename(relativePath);
+}
+
 function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): TreeFolderNode {
   const entries = listDirEntries(absPath);
   const children: TreeNode[] = [];
@@ -108,7 +125,7 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
 
   return {
     kind: 'folder',
-    name: relativePath ? path.basename(relativePath) : 'Knowledge',
+    name: folderDisplayName(relativePath),
     relativePath,
     emoji: catalogEmoji(ctx.meta, relativePath),
     indexPageSlug,

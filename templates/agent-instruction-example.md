@@ -1,5 +1,6 @@
 ---
 type: agent-instruction
+domain: shared
 slug: query-first
 status: accepted
 title: Query project knowledge before reading files

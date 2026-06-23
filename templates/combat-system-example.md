@@ -1,5 +1,6 @@
 ---
 type: feature-spec
+domain: game-design
 slug: combat-system
 status: proposed
 title: Combat System

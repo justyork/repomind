@@ -55,6 +55,7 @@ export function renderDocPanel(
   const title = typeof fm.title === 'string' ? fm.title : doc.slug ?? '';
   const status = typeof fm.status === 'string' ? fm.status : '';
   const type = typeof fm.type === 'string' ? fm.type : '';
+  const domain = typeof fm.domain === 'string' ? fm.domain : '';
   const tags = Array.isArray(fm.tags)
     ? fm.tags.filter((t): t is string => typeof t === 'string')
     : [];
@@ -98,6 +99,7 @@ export function renderDocPanel(
         <dl class="info-list">
           <dt>Status</dt><dd><span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status)}</span></dd>
           <dt>Type</dt><dd>${escapeHtml(type)}</dd>
+          ${domain ? `<dt>Domain</dt><dd>${escapeHtml(domain)}</dd>` : ''}
           <dt>Format</dt><dd>${escapeHtml(contentKind)}</dd>
           ${
             tags.length > 0

@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DocIndex } from '../src/index/doc-index.ts';
-import { buildDocsTree, readmeIndexRelativePath } from '../src/ui/fs-tree.ts';
+import { buildDocsTree, folderDisplayName, readmeIndexRelativePath } from '../src/ui/fs-tree.ts';
 
 const tmpRoots: string[] = [];
 
@@ -29,6 +29,53 @@ describe('readmeIndexRelativePath', () => {
   it('resolves root and nested README paths', () => {
     expect(readmeIndexRelativePath('')).toBe('README.md');
     expect(readmeIndexRelativePath('specs')).toBe('specs/README.md');
+  });
+});
+
+describe('folderDisplayName', () => {
+  it('labels top-level domain folders', () => {
+    expect(folderDisplayName('')).toBe('Knowledge');
+    expect(folderDisplayName('product')).toBe('Product');
+    expect(folderDisplayName('game-design')).toBe('Game design');
+    expect(folderDisplayName('product/specs')).toBe('specs');
+  });
+});
+
+describe('buildDocsTree domain labels', () => {
+  it('shows DOMAIN_LABELS for docs/{domain}/ roots', () => {
+    const repo = makeTempDir();
+    writeDoc(
+      repo,
+      'docs/README.md',
+      `---
+type: wiki-page
+slug: root
+status: accepted
+title: Root
+---
+`,
+    );
+    writeDoc(
+      repo,
+      'docs/product/README.md',
+      `---
+type: wiki-page
+slug: product-home
+status: accepted
+title: Product Home
+domain: product
+---
+`,
+    );
+
+    const tree = buildDocsTree(new DocIndex(repo));
+    const product = tree?.children.find(
+      (child) => child.kind === 'folder' && child.relativePath === 'product',
+    );
+    expect(product?.kind).toBe('folder');
+    if (product?.kind === 'folder') {
+      expect(product.name).toBe('Product');
+    }
   });
 });
 

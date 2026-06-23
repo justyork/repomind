@@ -1,5 +1,6 @@
 ---
 type: open-question
+domain: product
 slug: search-ranking
 status: draft
 title: Is grep ranking good enough?

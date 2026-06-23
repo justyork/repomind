@@ -1,9 +1,10 @@
 import type { DocIndex } from '../index/doc-index.js';
-import type { DocType } from '../index/types.js';
+import type { DocType, DocDomain } from '../index/types.js';
 
 export interface SearchDocsInput {
   query: string;
   type?: DocType;
+  domain?: DocDomain;
 }
 
 export interface SearchDocsResult {
@@ -87,6 +88,9 @@ export function searchDocs(
   let docs = index.refresh();
   if (input.type) {
     docs = docs.filter((doc) => doc.type === input.type);
+  }
+  if (input.domain) {
+    docs = docs.filter((doc) => doc.domain === input.domain);
   }
 
   const results: SearchDocsResult[] = [];
