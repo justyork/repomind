@@ -7,6 +7,7 @@ import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
 import { uploadAsset } from './api.js';
 import { parseMarkdownToDoc, serializeDocToMarkdown } from './markdown-roundtrip.js';
+import { bindTiptapSlashMenu } from './tiptap-slash-menu.js';
 import { bindTiptapWikilinkAutocomplete, Wikilink } from './tiptap-wikilink.js';
 import type { DocCandidate } from './wikilink-autocomplete.js';
 
@@ -66,7 +67,9 @@ export function mountVisualEditor(
       }),
       Link.configure({ openOnClick: false, autolink: true }),
       Image,
-      Placeholder.configure({ placeholder: 'Start writing…' }),
+      Placeholder.configure({
+        placeholder: 'Start writing, or type / for headings, lists, and links…',
+      }),
       TaskList,
       TaskItem.configure({ nested: true }),
       Wikilink,
@@ -78,6 +81,37 @@ export function mountVisualEditor(
   });
 
   const unbindAutocomplete = bindTiptapWikilinkAutocomplete(editor, options.docCandidates);
+
+  function insertImage(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml';
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) {
+        return;
+      }
+      void uploadAsset(file, 'assets')
+        .then(({ relativePath }) => {
+          editor.chain().focus().setImage({ src: relativePath }).run();
+        })
+        .catch((err: unknown) => {
+          options.onError(err instanceof Error ? err.message : 'Image upload failed');
+        });
+    });
+    input.click();
+  }
+
+  function insertWikilink(): void {
+    const slug = window.prompt('Wikilink slug');
+    if (!slug?.trim()) {
+      return;
+    }
+    const trimmed = slug.trim();
+    editor.chain().focus().insertWikilink({ slug: trimmed, label: trimmed }).run();
+  }
+
+  const unbindSlashMenu = bindTiptapSlashMenu(editor, insertImage, insertWikilink);
 
   const toolbar = container.querySelector<HTMLElement>('.visual-toolbar')!;
   toolbar.addEventListener('click', (event) => {
@@ -124,35 +158,12 @@ export function mountVisualEditor(
       case 'task':
         editor.chain().focus().toggleTaskList().run();
         break;
-      case 'wikilink': {
-        const slug = window.prompt('Wikilink slug');
-        if (!slug?.trim()) {
-          break;
-        }
-        const trimmed = slug.trim();
-        editor.chain().focus().insertWikilink({ slug: trimmed, label: trimmed }).run();
+      case 'wikilink':
+        insertWikilink();
         break;
-      }
-      case 'image': {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml';
-        input.addEventListener('change', () => {
-          const file = input.files?.[0];
-          if (!file) {
-            return;
-          }
-          void uploadAsset(file, 'assets')
-            .then(({ relativePath }) => {
-              editor.chain().focus().setImage({ src: relativePath }).run();
-            })
-            .catch((err: unknown) => {
-              options.onError(err instanceof Error ? err.message : 'Image upload failed');
-            });
-        });
-        input.click();
+      case 'image':
+        insertImage();
         break;
-      }
       default:
         break;
     }
@@ -161,6 +172,7 @@ export function mountVisualEditor(
   return {
     getMarkdownBody: () => serializeDocToMarkdown(editor.getJSON()),
     destroy: () => {
+      unbindSlashMenu();
       unbindAutocomplete();
       editor.destroy();
     },
