@@ -437,6 +437,54 @@ body {
   border-radius: 4px;
 }
 
+.visual-canvas .ProseMirror table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.9rem;
+}
+
+.visual-canvas .ProseMirror th,
+.visual-canvas .ProseMirror td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+}
+
+.visual-canvas .ProseMirror th {
+  background: var(--table-header);
+  font-weight: 600;
+}
+
+.visual-canvas .ProseMirror tr:nth-child(even) td {
+  background: var(--table-stripe);
+}
+
+.mermaid-editor-block {
+  margin: 0.75rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mermaid-editor-block pre {
+  margin: 0;
+  border-radius: 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.mermaid-editor-preview {
+  padding: 0.75rem;
+  background: var(--panel);
+  overflow-x: auto;
+}
+
+.mermaid-editor-preview .mermaid-placeholder {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
 .visual-canvas .ProseMirror p.is-editor-empty:first-child::before {
   color: var(--muted);
   content: attr(data-placeholder);

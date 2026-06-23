@@ -22,6 +22,7 @@ export function applyTheme(theme: Theme): void {
     /* localStorage unavailable */
   }
   syncThemeToggleLabels(theme);
+  window.dispatchEvent(new CustomEvent('repomind-theme-change', { detail: { theme } }));
 }
 
 export function initTheme(): Theme {

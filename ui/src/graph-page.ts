@@ -25,7 +25,7 @@ async function main(): Promise<void> {
       getGraph(ALL_GRAPH),
     ]);
 
-    statsEl.textContent = `${health.docCount} docs · ${graphData.nodes.length} nodes · ${drafts.length} drafts`;
+    statsEl.textContent = `v${health.version} · ${health.docCount} docs · ${graphData.nodes.length} nodes · ${drafts.length} drafts`;
 
     graph.load(graphData);
 

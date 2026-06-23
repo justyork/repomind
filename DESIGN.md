@@ -102,6 +102,7 @@ Light, structured, trustworthy. Hierarchy through **catalogs and pages**, not fi
 - **View markdown:** read-only modal with serialized body (escape hatch).
 - **Lazy load:** TipTap bundle loads only when opening the editor.
 - **PR2 (0.4.1):** PageShell unification, properties chips, slash menu.
+- **VE2 (0.4.2):** GFM tables in editor; mermaid live preview block.
 
 ## References
 

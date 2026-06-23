@@ -67,6 +67,8 @@ Record versions:
 - [ ] **Publish now** — primary Publish without modal; Review changes via Publish ▾ optional
 - [ ] **Properties chips** — status, tags, related editable in rail; autosave works
 - [ ] **Slash menu** — `/h2`, `/bullet`, `/todo` insert blocks in canvas
+- [ ] **Mermaid preview** — ` ```mermaid ` block shows live diagram in editor
+- [ ] **Tables** — insert GFM table, edit cells, publish round-trips
 - [ ] **Related suggest** — on publish review, related slug suggestions appear (accept or dismiss)
 - [ ] **Prepare** — `repo-mind prepare` on a legacy md file adds schema without data loss
 

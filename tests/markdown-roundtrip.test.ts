@@ -34,6 +34,14 @@ const CORPUS: Array<{ name: string; markdown: string }> = [
     name: 'convoy fixture',
     markdown: 'Rules for convoy movement. See [[caravan]] for glossary.',
   },
+  {
+    name: 'gfm table',
+    markdown: '| Feature | Status |\n| --- | --- |\n| Editor | Done |\n| MCP | Done |',
+  },
+  {
+    name: 'table with inline',
+    markdown: '| Term | Meaning |\n| --- | --- |\n| **Caravan** | Vehicle group |',
+  },
 ];
 
 function expectRoundTrip(markdown: string): void {

@@ -1,12 +1,18 @@
 import { Editor } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
+import CodeBlock from '@tiptap/extension-code-block';
 import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import TaskList from '@tiptap/extension-task-list';
 import TaskItem from '@tiptap/extension-task-item';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableCell from '@tiptap/extension-table-cell';
+import TableHeader from '@tiptap/extension-table-header';
 import { uploadAsset } from './api.js';
 import { parseMarkdownToDoc, serializeDocToMarkdown } from './markdown-roundtrip.js';
+import { bindMermaidEditorPreviews } from './tiptap-mermaid-preview.js';
 import { bindTiptapSlashMenu } from './tiptap-slash-menu.js';
 import { bindTiptapWikilinkAutocomplete, Wikilink } from './tiptap-wikilink.js';
 import type { DocCandidate } from './wikilink-autocomplete.js';
@@ -42,12 +48,16 @@ function buildToolbarHtml(): string {
       ${toolbarButton('• List', 'bullet')}
       ${toolbarButton('1. List', 'ordered')}
       ${toolbarButton('☐ Task', 'task')}
+      ${toolbarButton('Table', 'table')}
       <span class="editor-toolbar-sep"></span>
       ${toolbarButton('[[', 'wikilink', 'Insert wikilink')}
       ${toolbarButton('Image', 'image')}
+      ${toolbarButton('Mermaid', 'mermaid', 'Insert mermaid diagram')}
     </div>
   `;
 }
+
+const MERMAID_STARTER = 'graph LR\n  A --> B';
 
 export function mountVisualEditor(
   container: HTMLElement,
@@ -64,7 +74,15 @@ export function mountVisualEditor(
     extensions: [
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
+        codeBlock: false,
       }),
+      CodeBlock.configure({
+        languageClassPrefix: 'language-',
+      }),
+      Table.configure({ resizable: false }),
+      TableRow,
+      TableHeader,
+      TableCell,
       Link.configure({ openOnClick: false, autolink: true }),
       Image,
       Placeholder.configure({
@@ -81,6 +99,7 @@ export function mountVisualEditor(
   });
 
   const unbindAutocomplete = bindTiptapWikilinkAutocomplete(editor, options.docCandidates);
+  const unbindMermaid = bindMermaidEditorPreviews(editor, mountEl);
 
   function insertImage(): void {
     const input = document.createElement('input');
@@ -111,7 +130,26 @@ export function mountVisualEditor(
     editor.chain().focus().insertWikilink({ slug: trimmed, label: trimmed }).run();
   }
 
-  const unbindSlashMenu = bindTiptapSlashMenu(editor, insertImage, insertWikilink);
+  function insertMermaid(): void {
+    editor
+      .chain()
+      .focus()
+      .insertContent({
+        type: 'codeBlock',
+        attrs: { language: 'mermaid' },
+        content: [{ type: 'text', text: MERMAID_STARTER }],
+      })
+      .run();
+  }
+
+  function insertTable(): void {
+    editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run();
+  }
+
+  const unbindSlashMenu = bindTiptapSlashMenu(editor, insertImage, insertWikilink, {
+    onMermaid: insertMermaid,
+    onTable: insertTable,
+  });
 
   const toolbar = container.querySelector<HTMLElement>('.visual-toolbar')!;
   toolbar.addEventListener('click', (event) => {
@@ -158,11 +196,17 @@ export function mountVisualEditor(
       case 'task':
         editor.chain().focus().toggleTaskList().run();
         break;
+      case 'table':
+        insertTable();
+        break;
       case 'wikilink':
         insertWikilink();
         break;
       case 'image':
         insertImage();
+        break;
+      case 'mermaid':
+        insertMermaid();
         break;
       default:
         break;
@@ -172,6 +216,7 @@ export function mountVisualEditor(
   return {
     getMarkdownBody: () => serializeDocToMarkdown(editor.getJSON()),
     destroy: () => {
+      unbindMermaid();
       unbindSlashMenu();
       unbindAutocomplete();
       editor.destroy();

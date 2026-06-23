@@ -1,4 +1,4 @@
-import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
+import { enhanceMermaidPreview, renderMarkdown } from './markdown.js';
 import { buildPageUrl } from './navigation.js';
 import { getBacklinks } from './api.js';
 import { catalogLabel } from './catalog.js';
@@ -129,7 +129,7 @@ export function renderDocPanel(
         ? { docRelativePath: options.docRelativePath, slugByRelative: options.slugByRelative }
         : undefined;
     previewEl.innerHTML = renderMarkdown(doc.body ?? '', markdownContext);
-    void enhanceMarkdownPreview(previewEl);
+    void enhanceMermaidPreview(previewEl);
 
     previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
       link.addEventListener('click', (event) => {

@@ -255,6 +255,42 @@ function blockTokenToNodes(token: Token): JSONContent[] {
         },
       ];
     }
+    case 'table': {
+      const table = token as Tokens.Table;
+      const rows: JSONContent[] = [];
+
+      if (table.header.length > 0) {
+        rows.push({
+          type: 'tableRow',
+          content: table.header.map((cell) => ({
+            type: 'tableHeader',
+            content: [
+              {
+                type: 'paragraph',
+                content: tokensToInlineContent(cell.tokens),
+              },
+            ],
+          })),
+        });
+      }
+
+      for (const row of table.rows) {
+        rows.push({
+          type: 'tableRow',
+          content: row.map((cell) => ({
+            type: 'tableCell',
+            content: [
+              {
+                type: 'paragraph',
+                content: tokensToInlineContent(cell.tokens),
+              },
+            ],
+          })),
+        });
+      }
+
+      return rows.length > 0 ? [{ type: 'table', content: rows }] : [];
+    }
     case 'space':
       return [];
     default:
@@ -329,8 +365,32 @@ function serializeInline(content: JSONContent[] | undefined): string {
   return content.map((node) => serializeInlineNode(node)).join('');
 }
 
+function escapeTableCell(text: string): string {
+  return text.replace(/\|/g, '\\|');
+}
+
+function serializeTableCell(cell: JSONContent): string {
+  const paragraph = cell.content?.[0];
+  return escapeTableCell(serializeInline(paragraph?.content));
+}
+
+function serializeTable(node: JSONContent): string {
+  const rows = node.content ?? [];
+  const lines: string[] = [];
+  rows.forEach((row, index) => {
+    const cells = (row.content ?? []).map((cell) => serializeTableCell(cell));
+    lines.push(`| ${cells.join(' | ')} |`);
+    if (index === 0) {
+      lines.push(`| ${cells.map(() => '---').join(' | ')} |`);
+    }
+  });
+  return lines.join('\n');
+}
+
 function serializeBlock(node: JSONContent): string {
   switch (node.type) {
+    case 'table':
+      return serializeTable(node);
     case 'paragraph':
       return serializeInline(node.content);
     case 'heading': {
