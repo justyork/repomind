@@ -24,7 +24,7 @@ Single source of truth for release phases. Engineering detail: [v4 eng spec](../
 | **v3** | README folder index, deep links (`?slug=`), yaml/json reader, image serving via `/api/assets/` |
 | **v3+** | Documentation domains (`product/`, `technical/`, `game-design/`, …), `repomind-docs` authoring skill |
 
-Package version on `main`: **0.4.1** (0.4.0: visual WYSIWYG editor; 0.4.1: PageShell + properties chips + slash menu)
+Package version on `main`: **0.4.2** (0.4.1: PageShell + properties chips; 0.4.2: editor tables + mermaid preview)
 
 ## v4.0 — Prove (in progress)
 
@@ -59,6 +59,7 @@ npm run ab-demo:run      # token comparison → ab-demo/results/latest.json
 | E3 | Image upload in editor | **Done** (0.3.0) — `POST /api/assets/upload` |
 | E6 | Visual WYSIWYG editor (TipTap) | **Done** (0.4.0) — single canvas, publish-now default, view markdown |
 | E6b | PageShell + properties chips + slash menu | **Done** (0.4.1) |
+| E6c | Editor tables + mermaid live preview | **Done** (0.4.2) |
 
 ## v4.2 — Agent write (gated)
 

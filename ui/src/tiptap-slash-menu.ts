@@ -6,6 +6,11 @@ interface SlashCommand {
   keywords: string;
 }
 
+export interface SlashMenuHandlers {
+  onMermaid?: () => void;
+  onTable?: () => void;
+}
+
 const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'h1', label: 'Heading 1', keywords: 'h1 heading' },
   { id: 'h2', label: 'Heading 2', keywords: 'h2 heading' },
@@ -13,6 +18,8 @@ const SLASH_COMMANDS: SlashCommand[] = [
   { id: 'bullet', label: 'Bullet list', keywords: 'bullet list ul' },
   { id: 'todo', label: 'Task list', keywords: 'todo task checkbox' },
   { id: 'code', label: 'Code block', keywords: 'code fence' },
+  { id: 'mermaid', label: 'Mermaid diagram', keywords: 'mermaid diagram chart' },
+  { id: 'table', label: 'Table', keywords: 'table grid' },
   { id: 'image', label: 'Image', keywords: 'image upload' },
   { id: 'link', label: 'Wikilink', keywords: 'link wikilink' },
 ];
@@ -34,6 +41,7 @@ export function bindTiptapSlashMenu(
   editor: Editor,
   onImage: () => void,
   onWikilink: () => void,
+  handlers: SlashMenuHandlers = {},
 ): () => void {
   const menu = document.createElement('div');
   menu.className = 'slash-menu hidden';
@@ -80,6 +88,12 @@ export function bindTiptapSlashMenu(
         break;
       case 'code':
         editor.chain().focus().toggleCodeBlock().run();
+        break;
+      case 'mermaid':
+        handlers.onMermaid?.();
+        break;
+      case 'table':
+        handlers.onTable?.();
         break;
       case 'image':
         onImage();

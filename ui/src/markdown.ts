@@ -1,7 +1,10 @@
 import { marked, type Tokens } from 'marked';
 
 import { slugForMarkdownHref, assetApiUrl } from './resolve-md-href.js';
+import { enhanceMermaidPreview } from './mermaid-preview.js';
 import { parseWikilinkMatch, WIKILINK_PATTERN } from './wikilink-syntax.js';
+
+export { enhanceMermaidPreview };
 
 let configured = false;
 let renderContext: MarkdownRenderContext | null = null;
@@ -134,37 +137,5 @@ export function renderMarkdown(markdown: string, context?: MarkdownRenderContext
     return marked.parse(preprocessWikilinks(markdown), { async: false }) as string;
   } finally {
     renderContext = null;
-  }
-}
-
-let mermaidTheme: string | null = null;
-
-export async function enhanceMarkdownPreview(root: HTMLElement): Promise<void> {
-  const nodes = root.querySelectorAll<HTMLElement>('pre.mermaid');
-  if (nodes.length === 0) {
-    return;
-  }
-
-  const theme = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'default';
-  const mermaid = await import('mermaid');
-
-  if (mermaidTheme !== theme) {
-    mermaid.default.initialize({
-      startOnLoad: false,
-      theme,
-      securityLevel: 'loose',
-    });
-    mermaidTheme = theme;
-  }
-
-  try {
-    await mermaid.default.run({ nodes: [...nodes] });
-  } catch {
-    for (const node of nodes) {
-      if (!node.closest('.mermaid-error')) {
-        const wrapper = node.parentElement;
-        wrapper?.classList.add('mermaid-error');
-      }
-    }
   }
 }

@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.4.1** — visual WYSIWYG editor (TipTap), PageShell reader/editor chrome, properties chips, slash menu. Keyboard nav, image upload, domain labels, `ab-demo` harness.
+**v0.4.2** — visual WYSIWYG editor (TipTap), PageShell reader/editor chrome, properties chips, slash menu, GFM tables, mermaid live preview in editor. Keyboard nav, image upload, domain labels, `ab-demo` harness.
 
 | Artifact | Location |
 |----------|----------|
