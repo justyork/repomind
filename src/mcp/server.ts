@@ -31,7 +31,7 @@ let acceptingCalls = true;
 export async function startMcpServer(): Promise<void> {
   const index = new DocIndex(process.cwd());
   const server = new Server(
-    { name: 'repo-mind', version: '0.2.0' },
+    { name: 'repo-mind', version: '0.3.0' },
     { capabilities: { tools: {} } },
   );
 

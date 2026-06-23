@@ -24,7 +24,7 @@ Single source of truth for release phases. Engineering detail: [v4 eng spec](../
 | **v3** | README folder index, deep links (`?slug=`), yaml/json reader, image serving via `/api/assets/` |
 | **v3+** | Documentation domains (`product/`, `technical/`, `game-design/`, …), `repomind-docs` authoring skill |
 
-Package version on `main`: **0.2.0**
+Package version on `main`: **0.3.0** (0.2.0: domains + ab-demo; 0.3.0: keyboard nav + image upload)
 
 ## v4.0 — Prove (in progress)
 
@@ -55,8 +55,8 @@ npm run ab-demo:run      # token comparison → ab-demo/results/latest.json
 | ID | Feature | Notes |
 |----|---------|-------|
 | ~~E1~~ | ~~Domain labels in catalog tree~~ | Shipped in 0.2.0 |
-| E2 | Keyboard nav (`j`/`k`, `/`, `e`) | Reader + tree focus |
-| E3 | Image upload in editor | `POST /api/assets/upload`, `safe-path` guards |
+| E2 | Keyboard nav (`j`/`k`, `/`, `e`) | **Done** (0.3.0) |
+| E3 | Image upload in editor | **Done** (0.3.0) — `POST /api/assets/upload` |
 
 ## v4.2 — Agent write (gated)
 

@@ -368,3 +368,20 @@ export function syncAllLinks(options: {
     body: JSON.stringify(options),
   });
 }
+
+export interface AssetUploadResponse {
+  relativePath: string;
+  url: string;
+}
+
+export async function uploadAsset(file: File, relativeDir = 'assets'): Promise<AssetUploadResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  form.append('relativeDir', relativeDir);
+  const res = await fetch('/api/assets/upload', { method: 'POST', body: form });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `HTTP ${res.status}`);
+  }
+  return res.json() as Promise<AssetUploadResponse>;
+}

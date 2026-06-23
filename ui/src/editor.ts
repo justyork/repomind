@@ -1,5 +1,5 @@
 import type { Draft, ListDocsItem } from './api.js';
-import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
+import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi, uploadAsset } from './api.js';
 import { catalogLabel } from './catalog.js';
 import { bindMarkdownToolbar, markdownToolbarHtml } from './markdown-toolbar.js';
 import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
@@ -198,7 +198,34 @@ export function renderDraftEditor(
     el.addEventListener('change', onInput);
   }
 
-  bindMarkdownToolbar(container, bodyEl, onInput);
+  bindMarkdownToolbar(container, bodyEl, onInput, {
+    onInsertImage: () => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) {
+          return;
+        }
+        void uploadAsset(file, 'assets')
+          .then(({ relativePath }) => {
+            const start = bodyEl.selectionStart;
+            const end = bodyEl.selectionEnd;
+            const insert = `![](${relativePath})`;
+            bodyEl.value = `${bodyEl.value.slice(0, start)}${insert}${bodyEl.value.slice(end)}`;
+            const cursor = start + insert.length;
+            bodyEl.setSelectionRange(cursor, cursor);
+            bodyEl.focus();
+            onInput();
+          })
+          .catch((err: unknown) => {
+            callbacks.onError(err instanceof Error ? err.message : 'Image upload failed');
+          });
+      });
+      input.click();
+    },
+  });
   bindWikilinkAutocomplete(bodyEl, docCandidates, onInput);
 
   function showRelatedSuggestions(): void {
