@@ -1,6 +1,6 @@
 {
   "name": "repo-mind",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {
@@ -16,6 +16,8 @@
     "build:ui": "vite build --config ui/vite.config.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "ab-demo": "npm run build --silent && node dist/ab-demo/run-ab.js --dry-run",
+    "ab-demo:run": "npm run build --silent && node dist/ab-demo/run-ab.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {

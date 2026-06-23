@@ -1,5 +1,6 @@
 ---
 type: glossary-term
+domain: shared
 slug: mcp
 status: accepted
 title: Model Context Protocol (MCP)

@@ -1,15 +1,17 @@
 import type { DocIndex } from '../index/doc-index.js';
-import type { DocRecord, DocStatus, DocType } from '../index/types.js';
+import type { DocRecord, DocStatus, DocType, DocDomain } from '../index/types.js';
 
 export interface ListDocsInput {
   type?: DocType;
   status?: DocStatus;
   tag?: string;
+  domain?: DocDomain;
 }
 
 export interface ListDocsItem {
   slug: string;
   type: DocType;
+  domain: DocDomain;
   title: string;
   status: DocStatus;
   relativePath: string;
@@ -36,10 +38,14 @@ export function listDocs(index: DocIndex, input: ListDocsInput = {}): ListDocsIt
       doc.tags.some((tag) => tag.toLowerCase() === tagLower),
     );
   }
+  if (input.domain) {
+    docs = docs.filter((doc) => doc.domain === input.domain);
+  }
 
   return docs.map((doc) => ({
     slug: doc.slug,
     type: doc.type,
+    domain: doc.domain,
     title: doc.title,
     status: doc.status,
     relativePath: doc.relativePath,

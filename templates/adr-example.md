@@ -1,5 +1,6 @@
 ---
 type: adr
+domain: technical
 slug: use-plain-markdown
 status: accepted
 title: Use plain Markdown for project knowledge

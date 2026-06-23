@@ -2,33 +2,60 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { KNOWLEDGE_DIR } from '../index/doc-index.js';
-import { TYPE_TO_DIR } from '../index/types.js';
+import { DOC_DOMAINS, DOMAIN_LABELS, DOMAIN_TYPE_DIRS } from '../index/types.js';
 
 const PACKAGE_ROOT = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../..',
 );
 
-const SUBDIRS = Object.values(TYPE_TO_DIR);
-
 const TEMPLATE_FILES: Array<{ template: string; target: string }> = [
-  { template: 'adr-example.md', target: 'adr/use-plain-markdown.md' },
-  { template: 'feature-spec-example.md', target: 'specs/user-authentication.md' },
-  { template: 'glossary-term-example.md', target: 'glossary/mcp.md' },
-  { template: 'open-question-example.md', target: 'open-questions/search-ranking.md' },
-  { template: 'agent-instruction-example.md', target: 'agents/query-first.md' },
-  { template: 'combat-system-example.md', target: 'specs/combat-system.md' },
+  { template: 'adr-example.md', target: 'technical/adr/use-plain-markdown.md' },
+  { template: 'feature-spec-example.md', target: 'technical/specs/user-authentication.md' },
+  { template: 'glossary-term-example.md', target: 'shared/glossary/mcp.md' },
+  { template: 'open-question-example.md', target: 'product/open-questions/search-ranking.md' },
+  { template: 'agent-instruction-example.md', target: 'shared/agents/query-first.md' },
+  { template: 'combat-system-example.md', target: 'game-design/specs/combat-system.md' },
 ];
 
 const KNOWLEDGE_README = `# Project documentation
 
-This \`docs/\` directory is the single source of truth for project knowledge — wiki, architecture, ADR, specs, glossary, and agent rules.
+This \`docs/\` directory is the single source of truth for project knowledge.
 
-Humans edit via \`repo-mind ui\`; agents query the same files via MCP (\`search_docs\`, \`get_doc\`).
+## Domains
 
-Each structured page uses Markdown with YAML frontmatter. Run \`npx repo-mind check\` to validate schema and links.
-Existing markdown without frontmatter is indexed as wiki pages — use the UI **Prepare** flow to add frontmatter.
+| Domain | Purpose |
+|--------|---------|
+| \`product/\` | PRD, roadmap, user value, open product questions |
+| \`technical/\` | Architecture, ADR, API, infrastructure |
+| \`game-design/\` | Mechanics, balance, systems design |
+| \`analytics/\` | Metrics, events, dashboards, experiments |
+| \`art/\` | Visual style, assets, UI art guidelines |
+| \`narrative/\` | Story, lore, dialogue, quests |
+| \`ops/\` | Liveops, release, support runbooks |
+| \`shared/\` | Cross-domain glossary, agent rules |
+
+Each domain contains type subfolders (\`specs/\`, \`adr/\`, \`wiki/\`, …). See \`.cursor/skills/repomind-docs/structure.md\` for the full taxonomy.
+
+Humans edit via \`repo-mind ui\`; agents query via MCP (\`search_docs\`, \`get_doc\`).
+
+Run \`npx repo-mind check\` to validate frontmatter, domains, and links.
 `;
+
+function domainReadme(domain: (typeof DOC_DOMAINS)[number]): string {
+  const label = DOMAIN_LABELS[domain];
+  const subdirs = DOMAIN_TYPE_DIRS[domain].map((d) => `- \`${d}/\``).join('\n');
+  return `# ${label}
+
+Documentation domain: **${domain}**.
+
+## Subfolders
+
+${subdirs}
+
+Add a \`README.md\` in each subfolder when it grows beyond a few pages.
+`;
+}
 
 const KNOWLEDGE_GITIGNORE = `.worktrees/
 .repo-mind/
@@ -47,9 +74,15 @@ export function runInit(options: InitOptions = {}): number {
   }
 
   fs.mkdirSync(knowledgeRoot, { recursive: true });
+  fs.mkdirSync(path.join(knowledgeRoot, 'assets'), { recursive: true });
 
-  for (const subdir of SUBDIRS) {
-    fs.mkdirSync(path.join(knowledgeRoot, subdir), { recursive: true });
+  for (const domain of DOC_DOMAINS) {
+    const domainRoot = path.join(knowledgeRoot, domain);
+    fs.mkdirSync(domainRoot, { recursive: true });
+    writeIfMissing(path.join(domainRoot, 'README.md'), domainReadme(domain));
+    for (const subdir of DOMAIN_TYPE_DIRS[domain]) {
+      fs.mkdirSync(path.join(domainRoot, subdir), { recursive: true });
+    }
   }
 
   writeIfMissing(path.join(knowledgeRoot, 'README.md'), KNOWLEDGE_README);
@@ -61,7 +94,7 @@ export function runInit(options: InitOptions = {}): number {
     writeIfMissing(dest, fs.readFileSync(source, 'utf8'));
   }
 
-  console.log(`Initialized ${KNOWLEDGE_DIR}/ with example docs.`);
+  console.log(`Initialized ${KNOWLEDGE_DIR}/ with domain-based example docs.`);
   return 0;
 }
 

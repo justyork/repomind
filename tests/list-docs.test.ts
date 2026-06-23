@@ -52,6 +52,16 @@ describe('list_docs', () => {
     expect(listDocs(index, { tag: 'core' })).toHaveLength(1);
   });
 
+  it('filters by domain', () => {
+    writeDoc(
+      repo,
+      'docs/product/specs/prd.md',
+      'type: feature-spec\ndomain: product\nslug: prd\nstatus: accepted\ntitle: PRD',
+    );
+    expect(listDocs(index, { domain: 'product' })).toHaveLength(1);
+    expect(listDocs(index, { domain: 'technical' })).toHaveLength(0);
+  });
+
   it('returns empty when knowledge root missing', () => {
     const emptyIndex = new DocIndex(makeTempDir());
     expect(listDocs(emptyIndex)).toEqual([]);

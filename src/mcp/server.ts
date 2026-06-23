@@ -5,7 +5,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { DocIndex } from '../index/doc-index.js';
-import { DOC_TYPES, DOC_STATUSES } from '../index/types.js';
+import { DOC_TYPES, DOC_STATUSES, DOC_DOMAINS } from '../index/types.js';
 import { exploreGraph } from '../tools/explore-graph.js';
 import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
@@ -31,7 +31,7 @@ let acceptingCalls = true;
 export async function startMcpServer(): Promise<void> {
   const index = new DocIndex(process.cwd());
   const server = new Server(
-    { name: 'repo-mind', version: '0.1.0' },
+    { name: 'repo-mind', version: '0.2.0' },
     { capabilities: { tools: {} } },
   );
 
@@ -46,6 +46,7 @@ export async function startMcpServer(): Promise<void> {
             type: { type: 'string', enum: [...DOC_TYPES] },
             status: { type: 'string', enum: [...DOC_STATUSES] },
             tag: { type: 'string' },
+            domain: { type: 'string', enum: [...DOC_DOMAINS] },
           },
         },
       },
@@ -57,6 +58,7 @@ export async function startMcpServer(): Promise<void> {
           properties: {
             query: { type: 'string' },
             type: { type: 'string', enum: [...DOC_TYPES] },
+            domain: { type: 'string', enum: [...DOC_DOMAINS] },
           },
           required: ['query'],
         },
@@ -120,6 +122,10 @@ export async function startMcpServer(): Promise<void> {
                 ? (args.status as (typeof DOC_STATUSES)[number])
                 : undefined,
             tag: typeof args.tag === 'string' ? args.tag : undefined,
+            domain:
+              typeof args.domain === 'string'
+                ? (args.domain as (typeof DOC_DOMAINS)[number])
+                : undefined,
           }),
         );
       case 'search_docs':
@@ -127,6 +133,10 @@ export async function startMcpServer(): Promise<void> {
           searchDocs(index, {
             query: typeof args.query === 'string' ? args.query : '',
             type: typeof args.type === 'string' ? (args.type as (typeof DOC_TYPES)[number]) : undefined,
+            domain:
+              typeof args.domain === 'string'
+                ? (args.domain as (typeof DOC_DOMAINS)[number])
+                : undefined,
           }),
         );
       case 'get_doc':
