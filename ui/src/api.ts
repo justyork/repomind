@@ -44,6 +44,7 @@ export interface DocDetail {
 
 export interface HealthResponse {
   ok: boolean;
+  version: string;
   knowledgeRoot: string | null;
   docCount: number;
 }

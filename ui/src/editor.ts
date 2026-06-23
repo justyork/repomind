@@ -1,13 +1,8 @@
 import type { Draft, ListDocsItem } from './api.js';
-import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi, uploadAsset } from './api.js';
+import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
 import { catalogLabel } from './catalog.js';
-import { bindMarkdownToolbar, markdownToolbarHtml } from './markdown-toolbar.js';
-import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
-import {
-  bindWikilinkAutocomplete,
-  suggestRelatedFromBody,
-  type DocCandidate,
-} from './wikilink-autocomplete.js';
+import { suggestRelatedFromBody, type DocCandidate } from './wikilink-autocomplete.js';
+import type { VisualEditorHandle } from './visual-editor.js';
 
 export interface EditorCallbacks {
   onPublished: (path: string) => void;
@@ -17,7 +12,7 @@ export interface EditorCallbacks {
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let previewMermaidTimer: ReturnType<typeof setTimeout> | null = null;
+let inFlightSave: Promise<void> | null = null;
 
 export function renderDraftEditor(
   container: HTMLElement,
@@ -30,6 +25,9 @@ export function renderDraftEditor(
     title: doc.title,
   }));
   const knownSlugs = docCandidates.map((doc) => doc.slug);
+  let visualHandle: VisualEditorHandle | null = null;
+  let fallbackBody = draft.body;
+
   container.className = 'workspace-main workspace-editor';
   const catalog = catalogLabel(draft.type);
   container.innerHTML = `
@@ -45,22 +43,19 @@ export function renderDraftEditor(
         <header class="page-header">
           <input id="ed-title" class="title-input doc-title" type="text" placeholder="Document title" />
           <div class="workspace-actions">
-            <button type="button" id="ed-publish" class="btn-primary">Publish</button>
+            <div class="publish-split">
+              <button type="button" id="ed-publish" class="btn-primary publish-main">Publish</button>
+              <button type="button" id="ed-publish-menu-btn" class="btn-primary publish-menu-trigger" aria-haspopup="true" aria-expanded="false">▾</button>
+              <div id="ed-publish-menu" class="publish-menu hidden" role="menu">
+                <button type="button" id="ed-publish-review" role="menuitem">Review changes</button>
+              </div>
+            </div>
+            <button type="button" id="ed-view-md" class="btn-ghost">View markdown</button>
             <button type="button" id="ed-close" class="btn-ghost">Close</button>
             <button type="button" id="ed-discard" class="btn-ghost">Discard draft</button>
           </div>
         </header>
-        <div class="split-editor">
-          <div class="split-pane">
-            <div class="pane-label">Markdown</div>
-            ${markdownToolbarHtml()}
-            <textarea id="ed-body" spellcheck="false"></textarea>
-          </div>
-          <div class="split-pane">
-            <div class="pane-label">Preview</div>
-            <div id="ed-preview" class="markdown-preview pane-preview"></div>
-          </div>
-        </div>
+        <div id="ed-visual-canvas"></div>
       </div>
       <aside class="page-info">
         <h2 class="page-info-title">Page properties</h2>
@@ -116,6 +111,16 @@ export function renderDraftEditor(
         </div>
       </div>
     </div>
+    <div id="view-md-modal" class="modal hidden">
+      <div class="modal-card modal-card-wide">
+        <h3 class="modal-title">Markdown source</h3>
+        <pre id="view-md-content" class="md-source"></pre>
+        <div class="editor-actions">
+          <button type="button" id="view-md-copy" class="btn-primary">Copy</button>
+          <button type="button" id="view-md-close" class="btn-ghost">Close</button>
+        </div>
+      </div>
+    </div>
   `;
 
   const titleEl = container.querySelector<HTMLInputElement>('#ed-title')!;
@@ -124,9 +129,10 @@ export function renderDraftEditor(
   const statusEl = container.querySelector<HTMLSelectElement>('#ed-status')!;
   const tagsEl = container.querySelector<HTMLInputElement>('#ed-tags')!;
   const relatedEl = container.querySelector<HTMLInputElement>('#ed-related')!;
-  const bodyEl = container.querySelector<HTMLTextAreaElement>('#ed-body')!;
-  const previewEl = container.querySelector<HTMLDivElement>('#ed-preview')!;
+  const canvasEl = container.querySelector<HTMLElement>('#ed-visual-canvas')!;
   const modal = container.querySelector<HTMLDivElement>('#publish-modal')!;
+  const viewMdModal = container.querySelector<HTMLDivElement>('#view-md-modal')!;
+  const publishMenu = container.querySelector<HTMLDivElement>('#ed-publish-menu')!;
 
   titleEl.value = draft.title;
   slugEl.value = draft.slug;
@@ -134,27 +140,15 @@ export function renderDraftEditor(
   statusEl.value = draft.status;
   tagsEl.value = draft.tags.join(', ');
   relatedEl.value = draft.related.join(', ');
-  bodyEl.value = draft.body;
 
-  const markdownContext =
-    draft.target_path && docIndex.length > 0
-      ? {
-          docRelativePath: draft.target_path,
-          slugByRelative: new Map(docIndex.map((doc) => [doc.relativePath, doc.slug])),
-        }
-      : undefined;
-
-  function updatePreview(): void {
-    previewEl.innerHTML = renderMarkdown(bodyEl.value, markdownContext);
-    if (previewMermaidTimer) {
-      clearTimeout(previewMermaidTimer);
-    }
-    previewMermaidTimer = setTimeout(() => {
-      void enhanceMarkdownPreview(previewEl);
-    }, 350);
-  }
-
-  updatePreview();
+  void import('./visual-editor.js').then(({ mountVisualEditor }) => {
+    visualHandle = mountVisualEditor(canvasEl, {
+      initialMarkdown: draft.body,
+      docCandidates,
+      onBodyChange: () => scheduleSave(),
+      onError: callbacks.onError,
+    });
+  });
 
   let pendingRelatedSuggestions: string[] = [];
 
@@ -165,27 +159,56 @@ export function renderDraftEditor(
       .filter(Boolean);
   }
 
+  function getBody(): string {
+    return visualHandle?.getMarkdownBody() ?? fallbackBody;
+  }
+
+  function buildDraftPayload() {
+    return {
+      title: titleEl.value,
+      slug: slugEl.value,
+      type: typeEl.value,
+      status: statusEl.value,
+      tags: parseList(tagsEl.value),
+      related: parseList(relatedEl.value),
+      body: getBody(),
+    };
+  }
+
+  async function persistDraft(): Promise<void> {
+    const payload = buildDraftPayload();
+    fallbackBody = payload.body;
+    await updateDraftApi(draft.id, payload);
+  }
+
   function scheduleSave(): void {
     if (saveTimer) {
       clearTimeout(saveTimer);
     }
     saveTimer = setTimeout(() => {
-      void updateDraftApi(draft.id, {
-        title: titleEl.value,
-        slug: slugEl.value,
-        type: typeEl.value,
-        status: statusEl.value,
-        tags: parseList(tagsEl.value),
-        related: parseList(relatedEl.value),
-        body: bodyEl.value,
-      }).catch((err: unknown) => {
+      saveTimer = null;
+      inFlightSave = persistDraft().catch((err: unknown) => {
         callbacks.onError(err instanceof Error ? err.message : 'Autosave failed');
-      });
+      }) as Promise<void>;
     }, 800);
   }
 
-  const onInput = () => {
-    updatePreview();
+  async function flushPendingSave(): Promise<void> {
+    if (saveTimer) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      inFlightSave = persistDraft().catch((err: unknown) => {
+        callbacks.onError(err instanceof Error ? err.message : 'Autosave failed');
+        throw err;
+      }) as Promise<void>;
+    }
+    if (inFlightSave) {
+      await inFlightSave;
+      inFlightSave = null;
+    }
+  }
+
+  const onMetaInput = () => {
     const catalogEl = container.querySelector<HTMLInputElement>('#ed-catalog');
     if (catalogEl) {
       catalogEl.value = catalogLabel(typeEl.value);
@@ -193,47 +216,17 @@ export function renderDraftEditor(
     scheduleSave();
   };
 
-  for (const el of [titleEl, slugEl, typeEl, statusEl, tagsEl, relatedEl, bodyEl]) {
-    el.addEventListener('input', onInput);
-    el.addEventListener('change', onInput);
+  for (const el of [titleEl, slugEl, typeEl, statusEl, tagsEl, relatedEl]) {
+    el.addEventListener('input', onMetaInput);
+    el.addEventListener('change', onMetaInput);
   }
-
-  bindMarkdownToolbar(container, bodyEl, onInput, {
-    onInsertImage: () => {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml';
-      input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        if (!file) {
-          return;
-        }
-        void uploadAsset(file, 'assets')
-          .then(({ relativePath }) => {
-            const start = bodyEl.selectionStart;
-            const end = bodyEl.selectionEnd;
-            const insert = `![](${relativePath})`;
-            bodyEl.value = `${bodyEl.value.slice(0, start)}${insert}${bodyEl.value.slice(end)}`;
-            const cursor = start + insert.length;
-            bodyEl.setSelectionRange(cursor, cursor);
-            bodyEl.focus();
-            onInput();
-          })
-          .catch((err: unknown) => {
-            callbacks.onError(err instanceof Error ? err.message : 'Image upload failed');
-          });
-      });
-      input.click();
-    },
-  });
-  bindWikilinkAutocomplete(bodyEl, docCandidates, onInput);
 
   function showRelatedSuggestions(): void {
     const relatedSection = container.querySelector<HTMLElement>('#publish-related')!;
     const promptEl = container.querySelector<HTMLElement>('#publish-related-prompt')!;
     const listEl = container.querySelector<HTMLElement>('#publish-related-list')!;
     pendingRelatedSuggestions = suggestRelatedFromBody(
-      bodyEl.value,
+      getBody(),
       parseList(relatedEl.value),
       docCandidates,
     );
@@ -271,52 +264,6 @@ export function renderDraftEditor(
     container.querySelector('#publish-related')?.classList.add('hidden');
   });
 
-  container.querySelector<HTMLButtonElement>('#ed-publish')?.addEventListener('click', () => {
-    void (async () => {
-      if (saveTimer) {
-        clearTimeout(saveTimer);
-      }
-      await updateDraftApi(draft.id, {
-        title: titleEl.value,
-        slug: slugEl.value,
-        type: typeEl.value,
-        status: statusEl.value,
-        tags: parseList(tagsEl.value),
-        related: parseList(relatedEl.value),
-        body: bodyEl.value,
-      });
-
-      openPublishModal();
-      showRelatedSuggestions();
-      const target = container.querySelector<HTMLElement>('#publish-target')!;
-      const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
-      target.textContent = `docs/.../${slugEl.value}.md`;
-      diffEl.textContent = 'Loading diff…';
-
-      try {
-        const diffResult = await getDraftDiff(draft.id);
-        if (diffResult.targetPath) {
-          target.textContent = diffResult.targetPath;
-        }
-        diffEl.textContent = diffResult.diff;
-      } catch (err) {
-        diffEl.textContent = err instanceof Error ? err.message : 'Diff unavailable';
-      }
-    })().catch((err: unknown) => {
-      callbacks.onError(err instanceof Error ? err.message : 'Failed to prepare publish');
-    });
-  });
-
-  container.querySelector<HTMLButtonElement>('#publish-cancel')?.addEventListener('click', () => {
-    closePublishModal();
-  });
-
-  modal.addEventListener('click', (event) => {
-    if (event.target === modal) {
-      closePublishModal();
-    }
-  });
-
   let escapeHandler: ((event: KeyboardEvent) => void) | null = null;
 
   function closePublishModal(): void {
@@ -339,20 +286,111 @@ export function renderDraftEditor(
     }
   }
 
+  function closeViewMdModal(): void {
+    viewMdModal.classList.add('hidden');
+  }
+
+  function openViewMdModal(): void {
+    const content = container.querySelector<HTMLElement>('#view-md-content')!;
+    content.textContent = getBody();
+    viewMdModal.classList.remove('hidden');
+  }
+
+  async function openReviewModal(): Promise<void> {
+    await flushPendingSave();
+    openPublishModal();
+    showRelatedSuggestions();
+    const target = container.querySelector<HTMLElement>('#publish-target')!;
+    const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
+    target.textContent = `docs/.../${slugEl.value}.md`;
+    diffEl.textContent = 'Loading diff…';
+
+    try {
+      const diffResult = await getDraftDiff(draft.id);
+      if (diffResult.targetPath) {
+        target.textContent = diffResult.targetPath;
+      }
+      diffEl.textContent = diffResult.diff;
+    } catch (err) {
+      diffEl.textContent = err instanceof Error ? err.message : 'Diff unavailable';
+    }
+  }
+
+  async function publishNow(): Promise<void> {
+    const publishBtn = container.querySelector<HTMLButtonElement>('#ed-publish')!;
+    publishBtn.setAttribute('aria-busy', 'true');
+    publishBtn.disabled = true;
+    try {
+      await flushPendingSave();
+      const { result } = await publishDraftApi(draft.id);
+      callbacks.onPublished(result.path);
+    } finally {
+      publishBtn.removeAttribute('aria-busy');
+      publishBtn.disabled = false;
+    }
+  }
+
+  container.querySelector<HTMLButtonElement>('#ed-publish')?.addEventListener('click', () => {
+    void publishNow().catch((err: unknown) => {
+      callbacks.onError(err instanceof Error ? err.message : 'Publish failed');
+    });
+  });
+
+  container.querySelector<HTMLButtonElement>('#ed-publish-review')?.addEventListener('click', () => {
+    publishMenu.classList.add('hidden');
+    void openReviewModal().catch((err: unknown) => {
+      callbacks.onError(err instanceof Error ? err.message : 'Failed to prepare publish');
+    });
+  });
+
+  container.querySelector<HTMLButtonElement>('#ed-publish-menu-btn')?.addEventListener('click', () => {
+    const hidden = publishMenu.classList.toggle('hidden');
+    container
+      .querySelector<HTMLButtonElement>('#ed-publish-menu-btn')
+      ?.setAttribute('aria-expanded', hidden ? 'false' : 'true');
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target as Node;
+    if (!publishMenu.contains(target) && !container.querySelector('#ed-publish-menu-btn')?.contains(target)) {
+      publishMenu.classList.add('hidden');
+      container.querySelector<HTMLButtonElement>('#ed-publish-menu-btn')?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  container.querySelector<HTMLButtonElement>('#ed-view-md')?.addEventListener('click', () => {
+    openViewMdModal();
+  });
+
+  container.querySelector<HTMLButtonElement>('#view-md-close')?.addEventListener('click', () => {
+    closeViewMdModal();
+  });
+
+  viewMdModal.addEventListener('click', (event) => {
+    if (event.target === viewMdModal) {
+      closeViewMdModal();
+    }
+  });
+
+  container.querySelector<HTMLButtonElement>('#view-md-copy')?.addEventListener('click', () => {
+    void navigator.clipboard.writeText(getBody()).catch((err: unknown) => {
+      callbacks.onError(err instanceof Error ? err.message : 'Copy failed');
+    });
+  });
+
+  container.querySelector<HTMLButtonElement>('#publish-cancel')?.addEventListener('click', () => {
+    closePublishModal();
+  });
+
+  modal.addEventListener('click', (event) => {
+    if (event.target === modal) {
+      closePublishModal();
+    }
+  });
+
   container.querySelector<HTMLButtonElement>('#publish-confirm')?.addEventListener('click', () => {
     void (async () => {
-      if (saveTimer) {
-        clearTimeout(saveTimer);
-      }
-      await updateDraftApi(draft.id, {
-        title: titleEl.value,
-        slug: slugEl.value,
-        type: typeEl.value,
-        status: statusEl.value,
-        tags: parseList(tagsEl.value),
-        related: parseList(relatedEl.value),
-        body: bodyEl.value,
-      });
+      await flushPendingSave();
       const { result } = await publishDraftApi(draft.id);
       closePublishModal();
       callbacks.onPublished(result.path);
@@ -362,6 +400,7 @@ export function renderDraftEditor(
   });
 
   container.querySelector<HTMLButtonElement>('#ed-close')?.addEventListener('click', () => {
+    visualHandle?.destroy();
     callbacks.onClosed();
   });
 
@@ -369,6 +408,7 @@ export function renderDraftEditor(
     if (!confirm('Discard this draft?')) {
       return;
     }
+    visualHandle?.destroy();
     void deleteDraftApi(draft.id)
       .then(() => callbacks.onDeleted())
       .catch((err: unknown) => {

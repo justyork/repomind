@@ -39,7 +39,7 @@ Each domain contains type subfolders (\`specs/\`, \`adr/\`, \`wiki/\`, …). See
 
 Humans edit via \`repo-mind ui\`; agents query via MCP (\`search_docs\`, \`get_doc\`).
 
-Run \`npx repo-mind check\` to validate frontmatter, domains, and links.
+Run \`npx @justyork/repo-mind check\` to validate frontmatter, domains, and links.
 `;
 
 function domainReadme(domain: (typeof DOC_DOMAINS)[number]): string {

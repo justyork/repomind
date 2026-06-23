@@ -14,6 +14,17 @@ export default defineConfig({
         main: path.resolve(uiRoot, 'index.html'),
         graph: path.resolve(uiRoot, 'graph.html'),
       },
+      output: {
+        manualChunks(id) {
+          if (
+            id.includes('@tiptap') ||
+            id.includes('prosemirror') ||
+            id.includes('node_modules/marked')
+          ) {
+            return 'editor';
+          }
+        },
+      },
     },
   },
 });

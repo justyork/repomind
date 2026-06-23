@@ -1,6 +1,6 @@
 {
-  "name": "repo-mind",
-  "version": "0.3.0",
+  "name": "@justyork/repo-mind",
+  "version": "0.4.0",
   "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {
@@ -44,6 +44,14 @@
     "minimatch": "^10.0.1"
   },
   "devDependencies": {
+    "@tiptap/core": "^2.27.2",
+    "@tiptap/extension-image": "^2.27.2",
+    "@tiptap/extension-link": "^2.27.2",
+    "@tiptap/extension-placeholder": "^2.27.2",
+    "@tiptap/extension-task-item": "^2.27.2",
+    "@tiptap/extension-task-list": "^2.27.2",
+    "@tiptap/pm": "^2.27.2",
+    "@tiptap/starter-kit": "^2.27.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.21",
     "d3": "^7.9.0",

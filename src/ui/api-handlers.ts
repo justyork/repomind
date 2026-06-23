@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'node:url';
 import { collectCheckReport } from '../check/collect-violations.js';
+import { getPackageVersion } from '../package-version.js';
 import type { DocIndex } from '../index/doc-index.js';
 import {
   computeLinkHealth,
@@ -47,6 +48,7 @@ export function handleApiRequest(
       status: 200,
       body: {
         ok: true,
+        version: getPackageVersion(),
         knowledgeRoot: index.getKnowledgeRoot(),
         docCount: docs.length,
       },

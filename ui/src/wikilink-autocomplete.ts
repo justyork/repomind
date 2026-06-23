@@ -1,20 +1,12 @@
+import { extractWikilinkTargets } from './wikilink-syntax.js';
+
 export interface DocCandidate {
   slug: string;
   title: string;
 }
 
-const WIKILINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-
 export function parseWikilinkTargets(body: string): string[] {
-  const targets: string[] = [];
-  for (const match of body.matchAll(WIKILINK_PATTERN)) {
-    const display = match[1]?.trim() ?? '';
-    const slugPart = match[2]?.trim() ?? display;
-    if (slugPart) {
-      targets.push(slugPart);
-    }
-  }
-  return targets;
+  return extractWikilinkTargets(body);
 }
 
 function resolveTargetToSlug(raw: string, docs: DocCandidate[]): string | null {
