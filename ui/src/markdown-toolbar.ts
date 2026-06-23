@@ -51,10 +51,15 @@ export function bindMarkdownToolbar(
   container: HTMLElement,
   textarea: HTMLTextAreaElement,
   onChange: () => void,
+  options: { onInsertImage?: () => void } = {},
 ): void {
   container.querySelectorAll<HTMLButtonElement>('[data-md-action]').forEach((button) => {
     button.addEventListener('click', () => {
       const key = button.dataset.mdAction ?? '';
+      if (key === 'image') {
+        options.onInsertImage?.();
+        return;
+      }
       const action = ACTIONS[key];
       if (!action) {
         return;
@@ -76,6 +81,7 @@ export function markdownToolbarHtml(): string {
       <button type="button" data-md-action="bold" title="Bold"><strong>B</strong></button>
       <button type="button" data-md-action="italic" title="Italic"><em>I</em></button>
       <button type="button" data-md-action="link" title="Link">Link</button>
+      <button type="button" data-md-action="image" title="Insert image">Image</button>
       <button type="button" data-md-action="task" title="Task list">Task</button>
     </div>
   `;

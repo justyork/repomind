@@ -117,6 +117,60 @@ function postJson(
   });
 }
 
+function buildMultipartUpload(
+  boundary: string,
+  fields: Record<string, string>,
+  file: { filename: string; data: Buffer },
+): Buffer {
+  const chunks: Buffer[] = [
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="relativeDir"\r\n\r\n${fields.relativeDir ?? 'assets'}\r\n`,
+    ),
+    Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.filename}"\r\nContent-Type: image/png\r\n\r\n`,
+    ),
+    file.data,
+    Buffer.from(`\r\n--${boundary}--\r\n`),
+  ];
+  return Buffer.concat(chunks);
+}
+
+function postMultipart(
+  port: number,
+  pathname: string,
+  body: Buffer,
+  boundary: string,
+): Promise<{ status: number; body: unknown }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        hostname: '127.0.0.1',
+        port,
+        path: pathname,
+        method: 'POST',
+        headers: {
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+        },
+      },
+      (res) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode ?? 0,
+            body: text ? JSON.parse(text) : null,
+          });
+        });
+      },
+    );
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
 describe('exploreGraphAll', () => {
   it('returns all docs as nodes with edges', () => {
     const repo = makeTempDir();
@@ -242,6 +296,49 @@ describe('UI HTTP API', () => {
 
       const notImage = await fetch(`http://127.0.0.1:${port}/api/assets/glossary/caravan.md`);
       expect(notImage.status).toBe(400);
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      fs.rmSync(staticDir, { recursive: true, force: true });
+    }
+  });
+
+  it('uploads image via POST /api/assets/upload', async () => {
+    const repo = makeTempDir();
+    fixtureKnowledge(repo);
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z5BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+      'base64',
+    );
+    const index = new DocIndex(repo);
+    const staticDir = fs.mkdtempSync(path.join(os.tmpdir(), 'repo-mind-static-'));
+    const server = createUiServer({ port: 0, index, staticDir, host: '127.0.0.1' });
+    await new Promise<void>((resolve) => {
+      server.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const addr = server.address();
+    if (!addr || typeof addr === 'string') {
+      throw new Error('no port');
+    }
+    const port = addr.port;
+    const boundary = 'api-upload-test';
+
+    try {
+      const body = buildMultipartUpload(boundary, { relativeDir: 'assets' }, {
+        filename: 'uploaded.png',
+        data: png,
+      });
+      const upload = await postMultipart(port, '/api/assets/upload', body, boundary);
+      expect(upload.status).toBe(200);
+      expect(upload.body).toMatchObject({
+        relativePath: 'assets/uploaded.png',
+        url: '/api/assets/assets/uploaded.png',
+      });
+
+      const asset = await fetch(`http://127.0.0.1:${port}/api/assets/assets/uploaded.png`);
+      expect(asset.status).toBe(200);
+      const assetBody = Buffer.from(await asset.arrayBuffer());
+      expect(assetBody.equals(png)).toBe(true);
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       fs.rmSync(staticDir, { recursive: true, force: true });

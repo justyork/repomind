@@ -9,6 +9,7 @@ import type { DocsWatcher } from './docs-watcher.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { handleDraftApi } from './draft-api.js';
 import { serveKnowledgeAsset } from './serve-asset.js';
+import { handleAssetUpload, MAX_ASSET_UPLOAD_BYTES } from './upload-asset.js';
 
 export interface UiServerOptions {
   host?: string;
@@ -31,6 +32,24 @@ const MIME_TYPES: Record<string, string> = {
 };
 
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
+function readBodyBuffer(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    let size = 0;
+    req.on('data', (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(new Error('request body too large'));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('error', reject);
+  });
+}
 
 function resolveStaticPath(staticDir: string, requestPath: string): string | null {
   const normalized = path.normalize(requestPath).replace(/^(\.\.(\/|\\|$))+/, '');
@@ -111,6 +130,30 @@ export function createUiServer(options: UiServerOptions): http.Server {
       const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
 
       if (urlPath.startsWith('/api/')) {
+        if (urlPath === '/api/assets/upload' && method === 'POST') {
+          const knowledgeRoot = index.getKnowledgeRoot();
+          if (!knowledgeRoot) {
+            sendJson(res, 404, { error: 'no docs/ directory found' });
+            return;
+          }
+          const contentType = req.headers['content-type'] ?? '';
+          if (!contentType.toLowerCase().includes('multipart/form-data')) {
+            sendJson(res, 400, { error: 'multipart/form-data required' });
+            return;
+          }
+          let bodyBuffer: Buffer;
+          try {
+            bodyBuffer = await readBodyBuffer(req, MAX_ASSET_UPLOAD_BYTES);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'bad request';
+            sendJson(res, 400, { error: message });
+            return;
+          }
+          const uploadResponse = handleAssetUpload(knowledgeRoot, bodyBuffer, contentType);
+          sendJson(res, uploadResponse.status, uploadResponse.body);
+          return;
+        }
+
         if (urlPath.startsWith('/api/assets/') && method === 'GET') {
           const knowledgeRoot = index.getKnowledgeRoot();
           if (!knowledgeRoot) {

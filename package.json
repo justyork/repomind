@@ -1,6 +1,6 @@
 {
   "name": "repo-mind",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {

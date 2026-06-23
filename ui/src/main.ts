@@ -16,6 +16,7 @@ import { renderDashboard } from './dashboard.js';
 import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
 import { bindThemeToggle, initTheme } from './theme.js';
+import { bindKeyboardNav, collectTreeSlugs } from './keyboard-nav.js';
 import { renderTreeSidebar } from './tree-sidebar.js';
 import { subscribeDocsReload } from './live-reload.js';
 import {
@@ -54,12 +55,6 @@ async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
   return drafts;
 }
 
-async function reloadTree(sidebarEl: HTMLElement): Promise<TreeFolderNode> {
-  const [{ tree }, { drafts }] = await Promise.all([getDocsTree(), listDrafts()]);
-  sidebarEl.refreshTree?.(tree, drafts);
-  return tree;
-}
-
 async function main(): Promise<void> {
   bindThemeToggle(document.querySelector<HTMLButtonElement>('#theme-toggle'));
 
@@ -72,9 +67,17 @@ async function main(): Promise<void> {
 
   let docs: ListDocsItem[] = [];
   let currentSlug: string | null = null;
+  let treeOrderSlugs: string[] = [];
   let viewMode: 'workspace' | 'dashboard' = 'workspace';
   let dashboardRefresh: (() => Promise<void>) | null = null;
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
+
+  async function reloadTree(sidebarEl: HTMLElement): Promise<TreeFolderNode> {
+    const [{ tree }, { drafts }] = await Promise.all([getDocsTree(), listDrafts()]);
+    sidebarEl.refreshTree?.(tree, drafts);
+    treeOrderSlugs = collectTreeSlugs(tree);
+    return tree;
+  }
 
   function setViewMode(mode: 'workspace' | 'dashboard'): void {
     viewMode = mode;
@@ -105,6 +108,36 @@ async function main(): Promise<void> {
 
   healthToggle.addEventListener('click', () => {
     setViewMode(viewMode === 'dashboard' ? 'workspace' : 'dashboard');
+  });
+
+  bindKeyboardNav({
+    onNext: () => {
+      if (viewMode !== 'workspace' || !currentSlug) {
+        return;
+      }
+      const index = treeOrderSlugs.indexOf(currentSlug);
+      if (index >= 0 && index < treeOrderSlugs.length - 1) {
+        void selectSlug(treeOrderSlugs[index + 1]!);
+      }
+    },
+    onPrev: () => {
+      if (viewMode !== 'workspace' || !currentSlug) {
+        return;
+      }
+      const index = treeOrderSlugs.indexOf(currentSlug);
+      if (index > 0) {
+        void selectSlug(treeOrderSlugs[index - 1]!);
+      }
+    },
+    onFocusSearch: () => {
+      searchInput.focus();
+      searchInput.select();
+    },
+    onEdit: () => {
+      if (viewMode === 'workspace' && currentSlug) {
+        void startEdit(currentSlug);
+      }
+    },
   });
 
   async function refreshStats(): Promise<void> {
@@ -259,6 +292,7 @@ async function main(): Promise<void> {
       listDrafts(),
     ]);
     docs = docsRes.docs;
+    treeOrderSlugs = collectTreeSlugs(tree);
 
     renderTreeSidebar(sidebarEl, tree, drafts, {
       onSelectSlug: (slug) => {
