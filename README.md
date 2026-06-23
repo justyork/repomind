@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.2.0** — documentation domains, yaml/json reader, image serving, `ab-demo` kill-switch harness, `docs/` product roadmap. Confluence-style UI, wikilinks, deep links (`?slug=`), prepare/sync-links.
+**v0.3.0** — keyboard nav, image upload, domain labels, yaml/json reader, `ab-demo` harness. Confluence-style UI, wikilinks, deep links (`?slug=`), prepare/sync-links.
 
 | Artifact | Location |
 |----------|----------|
@@ -13,17 +13,25 @@
 | docs/ pivot spec | [`.gstack/projects/repo-mind/specs/2026-06-21-repomind-docs-root-pivot.md`](.gstack/projects/repo-mind/specs/2026-06-21-repomind-docs-root-pivot.md) |
 | Design system | [`DESIGN.md`](DESIGN.md) |
 
+## Install
+
+```bash
+npm install -g @justyork/repo-mind
+```
+
+CLI command remains **`repo-mind`** (bin alias unchanged).
+
 ## Quick start
 
 ```bash
+# From npm
+npx -y @justyork/repo-mind init
+npx -y @justyork/repo-mind setup
+
 # From this repo (local dev)
 npm install && npm run build
 node dist/cli.js init
 node dist/cli.js setup
-
-# After npm publish
-npx -y repo-mind init
-npx -y repo-mind setup
 ```
 
 Then ask your agent a project question — it should call `search_docs` / `get_doc` via MCP against the same `docs/` you edit in the UI.
@@ -78,7 +86,7 @@ Binds **127.0.0.1** only. MCP reads published files in `docs/` only (not SQLite 
 Add to GitHub Actions or pre-commit:
 
 ```yaml
-- run: npx repo-mind check
+- run: npx @justyork/repo-mind check
 ```
 
 ## Development

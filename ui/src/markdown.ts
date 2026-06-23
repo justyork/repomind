@@ -1,6 +1,7 @@
 import { marked, type Tokens } from 'marked';
 
 import { slugForMarkdownHref, assetApiUrl } from './resolve-md-href.js';
+import { parseWikilinkMatch, WIKILINK_PATTERN } from './wikilink-syntax.js';
 
 let configured = false;
 let renderContext: MarkdownRenderContext | null = null;
@@ -18,12 +19,9 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;');
 }
 
-const WIKILINK_PATTERN = /\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g;
-
 export function preprocessWikilinks(markdown: string): string {
   return markdown.replace(WIKILINK_PATTERN, (_, display, slugPart) => {
-    const slug = (slugPart ?? display).trim();
-    const label = display.trim();
+    const { display: label, slug } = parseWikilinkMatch(display, slugPart);
     const encoded = encodeURIComponent(slug);
     return `[${label}](#wikilink:${encoded})`;
   });

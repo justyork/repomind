@@ -150,7 +150,7 @@ async function main(): Promise<void> {
     const { drafts } = await listDrafts();
     const broken =
       stats.brokenRelatedCount > 0 ? ` · ${stats.brokenRelatedCount} broken links` : '';
-    statsEl.textContent = `${health.docCount} pages · ${drafts.length} drafts${broken}`;
+    statsEl.textContent = `v${health.version} · ${health.docCount} pages · ${drafts.length} drafts${broken}`;
   }
 
   const knownSlugs = (): string[] => docs.map((d) => d.slug);

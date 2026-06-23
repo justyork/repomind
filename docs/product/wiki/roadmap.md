@@ -24,7 +24,7 @@ Single source of truth for release phases. Engineering detail: [v4 eng spec](../
 | **v3** | README folder index, deep links (`?slug=`), yaml/json reader, image serving via `/api/assets/` |
 | **v3+** | Documentation domains (`product/`, `technical/`, `game-design/`, …), `repomind-docs` authoring skill |
 
-Package version on `main`: **0.3.0** (0.2.0: domains + ab-demo; 0.3.0: keyboard nav + image upload)
+Package version on `main`: **0.4.0** (0.3.0: keyboard nav + image upload; 0.4.0: visual WYSIWYG editor)
 
 ## v4.0 — Prove (in progress)
 
@@ -57,6 +57,7 @@ npm run ab-demo:run      # token comparison → ab-demo/results/latest.json
 | ~~E1~~ | ~~Domain labels in catalog tree~~ | Shipped in 0.2.0 |
 | E2 | Keyboard nav (`j`/`k`, `/`, `e`) | **Done** (0.3.0) |
 | E3 | Image upload in editor | **Done** (0.3.0) — `POST /api/assets/upload` |
+| E6 | Visual WYSIWYG editor (TipTap) | **Done** (0.4.0) — single canvas, publish-now default, view markdown |
 
 ## v4.2 — Agent write (gated)
 
@@ -76,7 +77,7 @@ Ship **only if** kill-switch passes (tokens + hallucinations).
 
 ## 12-month direction
 
-`npx repo-mind init` → daily dogfood on a real game project → proven MCP advantage → npm adoption → agents propose drafts → humans merge via PR. Full vision: [idea.md](../../../idea.md).
+`npx @justyork/repo-mind init` → daily dogfood on a real game project → proven MCP advantage → npm adoption → agents propose drafts → humans merge via PR. Full vision: [idea.md](../../../idea.md).
 
 ## Improvements backlog
 

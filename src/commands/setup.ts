@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+const NPM_PACKAGE_NAME = '@justyork/repo-mind';
 const MCP_SERVER_NAME = 'repo-mind';
 const CLAUDE_SNIPPET =
   '\n<!-- repo-mind -->\nProject knowledge lives in `docs/`. Use repo-mind MCP (`search_docs`, `get_doc`, `get_glossary_term`) — the same files humans edit in `repo-mind ui`.\n<!-- /repo-mind -->\n';
@@ -65,7 +66,7 @@ function mergeMcpConfig(configPath: string, force: boolean): void {
 
   config.mcpServers[MCP_SERVER_NAME] = {
     command: 'npx',
-    args: ['-y', 'repo-mind', 'mcp'],
+    args: ['-y', NPM_PACKAGE_NAME, 'mcp'],
   };
 
   writeJson(configPath, config);
@@ -86,7 +87,7 @@ function mergeClaudeConfig(configPath: string, force: boolean): void {
 
   config.mcpServers[MCP_SERVER_NAME] = {
     command: 'npx',
-    args: ['-y', 'repo-mind', 'mcp'],
+    args: ['-y', NPM_PACKAGE_NAME, 'mcp'],
   };
 
   writeJson(configPath, config);
@@ -117,4 +118,4 @@ function writeJson(filePath: string, value: unknown): void {
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
 }
 
-export { CLAUDE_SNIPPET, MCP_SERVER_NAME };
+export { CLAUDE_SNIPPET, MCP_SERVER_NAME, NPM_PACKAGE_NAME };

@@ -93,7 +93,15 @@ Light, structured, trustworthy. Hierarchy through **catalogs and pages**, not fi
 
 - Dark theme toggle (future).
 - Nested folders beyond `type` (until disk layout supports it).
-- WYSIWYG blocks, comments, permissions.
+- Comments, permissions.
+
+## Visual editor (E6, v0.4.0)
+
+- **Edit mode:** single TipTap WYSIWYG canvas (no Markdown/Preview split). Body serializes to markdown on disk.
+- **Publish:** primary action publishes immediately; **Publish ▾ → Review changes** opens diff modal.
+- **View markdown:** read-only modal with serialized body (escape hatch).
+- **Lazy load:** TipTap bundle loads only when opening the editor.
+- **PR2 (0.4.1):** PageShell unification, properties chips, slash menu.
 
 ## References
 

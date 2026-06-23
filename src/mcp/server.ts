@@ -4,6 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
+import { getPackageVersion } from '../package-version.js';
 import { DocIndex } from '../index/doc-index.js';
 import { DOC_TYPES, DOC_STATUSES, DOC_DOMAINS } from '../index/types.js';
 import { exploreGraph } from '../tools/explore-graph.js';
@@ -31,7 +32,7 @@ let acceptingCalls = true;
 export async function startMcpServer(): Promise<void> {
   const index = new DocIndex(process.cwd());
   const server = new Server(
-    { name: 'repo-mind', version: '0.3.0' },
+    { name: 'repo-mind', version: getPackageVersion() },
     { capabilities: { tools: {} } },
   );
 
