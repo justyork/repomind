@@ -2,6 +2,13 @@ import { enhanceMarkdownPreview, renderMarkdown } from './markdown.js';
 import { buildPageUrl } from './navigation.js';
 import { getBacklinks } from './api.js';
 import { catalogLabel } from './catalog.js';
+import {
+  bindBreadcrumbNavigation,
+  bindFocusToggle,
+  escapeHtml,
+  loadFocusMode,
+  renderPageShell,
+} from './page-shell.js';
 import { renderStructuredPreview } from './structured-preview.js';
 import type { DocDetail } from './api.js';
 
@@ -10,28 +17,51 @@ export interface DocPanelOptions {
   docRelativePath?: string;
   slugByRelative?: Map<string, string>;
   onCopyLink?: () => void;
+  onNavigateCatalog?: () => void;
+  onNavigateRoot?: () => void;
 }
 
-const FOCUS_STORAGE_KEY = 'repomind-page-info-hidden';
+function renderReadPropertiesRail(doc: DocDetail, fm: Record<string, unknown>): string {
+  const title = typeof fm.title === 'string' ? fm.title : doc.slug ?? '';
+  const status = typeof fm.status === 'string' ? fm.status : '';
+  const type = typeof fm.type === 'string' ? fm.type : '';
+  const domain = typeof fm.domain === 'string' ? fm.domain : '';
+  const tags = Array.isArray(fm.tags)
+    ? fm.tags.filter((t): t is string => typeof t === 'string')
+    : [];
+  const related = Array.isArray(fm.related)
+    ? fm.related.filter((r): r is string => typeof r === 'string')
+    : [];
+  const contentKind = doc.contentKind ?? 'markdown';
 
-function loadFocusMode(): boolean {
-  try {
-    const raw = localStorage.getItem(FOCUS_STORAGE_KEY);
-    if (raw === null) {
-      return true;
+  return `
+    <h2 class="page-info-title">Page info</h2>
+    <dl class="info-list">
+      <dt>Status</dt><dd><span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status)}</span></dd>
+      <dt>Type</dt><dd>${escapeHtml(type)}</dd>
+      ${domain ? `<dt>Domain</dt><dd>${escapeHtml(domain)}</dd>` : ''}
+      <dt>Format</dt><dd>${escapeHtml(contentKind)}</dd>
+      ${
+        tags.length > 0
+          ? `<dt>Tags</dt><dd>${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join(' ')}</dd>`
+          : ''
+      }
+    </dl>
+    ${
+      related.length > 0
+        ? `<div class="info-block"><div class="info-block-label">Related</div>${related.map((s) => `<button type="button" class="related-chip" data-slug="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('')}</div>`
+        : ''
     }
-    return raw === 'true';
-  } catch {
-    return true;
-  }
-}
-
-function saveFocusMode(hidden: boolean): void {
-  try {
-    localStorage.setItem(FOCUS_STORAGE_KEY, hidden ? 'true' : 'false');
-  } catch {
-    // ignore
-  }
+    <div class="info-tabs tabs">
+      <button class="tab active" data-tab="frontmatter">Frontmatter</button>
+      <button class="tab" data-tab="agent">Agent JSON</button>
+    </div>
+    <div id="tab-frontmatter" class="tab-panel active"></div>
+    <div id="tab-agent" class="tab-panel"></div>
+    <footer class="page-info-footer">
+      <code id="doc-path">${escapeHtml(doc.path ?? '')}</code>
+    </footer>
+  `;
 }
 
 export function renderDocPanel(
@@ -39,9 +69,8 @@ export function renderDocPanel(
   doc: DocDetail | null,
   options: DocPanelOptions = {},
 ): void {
-  container.className = 'workspace-main';
-
   if (!doc || !doc.found) {
+    container.className = 'workspace-main';
     container.innerHTML = `
       <div class="workspace-empty">
         <h1>Knowledge</h1>
@@ -53,15 +82,7 @@ export function renderDocPanel(
 
   const fm = doc.frontmatter ?? {};
   const title = typeof fm.title === 'string' ? fm.title : doc.slug ?? '';
-  const status = typeof fm.status === 'string' ? fm.status : '';
   const type = typeof fm.type === 'string' ? fm.type : '';
-  const domain = typeof fm.domain === 'string' ? fm.domain : '';
-  const tags = Array.isArray(fm.tags)
-    ? fm.tags.filter((t): t is string => typeof t === 'string')
-    : [];
-  const related = Array.isArray(fm.related)
-    ? fm.related.filter((r): r is string => typeof r === 'string')
-    : [];
   const catalog = catalogLabel(type);
   const focusMode = loadFocusMode();
   const contentKind = doc.contentKind ?? 'markdown';
@@ -70,62 +91,36 @@ export function renderDocPanel(
     ? ''
     : '<button type="button" id="edit-page" class="btn-primary">Edit</button>';
 
-  container.innerHTML = `
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <button type="button" class="crumb" data-crumb="root">Knowledge</button>
-      <span class="crumb-sep">›</span>
-      <button type="button" class="crumb" data-crumb="catalog">${escapeHtml(catalog)}</button>
-      <span class="crumb-sep">›</span>
-      <span class="crumb current">${escapeHtml(title)}</span>
-    </nav>
-    <div class="page-layout${focusMode ? ' page-layout--focus' : ''}">
-      <article class="page-content">
-        <header class="page-header">
-          <h1 class="doc-title">${escapeHtml(title)}</h1>
-          <div class="workspace-actions">
-            <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
-              ${focusMode ? 'Show info' : 'Hide info'}
-            </button>
-            ${editButton}
-            <button type="button" id="copy-link" class="btn-ghost">Copy link</button>
-            <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
-          </div>
-        </header>
-        <div id="tab-preview" class="markdown-preview reader-preview"></div>
-        <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
-      </article>
-      <aside class="page-info">
-        <h2 class="page-info-title">Page info</h2>
-        <dl class="info-list">
-          <dt>Status</dt><dd><span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status)}</span></dd>
-          <dt>Type</dt><dd>${escapeHtml(type)}</dd>
-          ${domain ? `<dt>Domain</dt><dd>${escapeHtml(domain)}</dd>` : ''}
-          <dt>Format</dt><dd>${escapeHtml(contentKind)}</dd>
-          ${
-            tags.length > 0
-              ? `<dt>Tags</dt><dd>${tags.map((t) => `<span class="tag-chip">${escapeHtml(t)}</span>`).join(' ')}</dd>`
-              : ''
-          }
-        </dl>
-        ${
-          related.length > 0
-            ? `<div class="info-block"><div class="info-block-label">Related</div>${related.map((s) => `<button type="button" class="related-chip" data-slug="${escapeHtml(s)}">${escapeHtml(s)}</button>`).join('')}</div>`
-            : ''
-        }
-        <div class="info-tabs tabs">
-          <button class="tab active" data-tab="frontmatter">Frontmatter</button>
-          <button class="tab" data-tab="agent">Agent JSON</button>
-        </div>
-        <div id="tab-frontmatter" class="tab-panel active"></div>
-        <div id="tab-agent" class="tab-panel"></div>
-        <footer class="page-info-footer">
-          <code id="doc-path">${escapeHtml(doc.path ?? '')}</code>
-        </footer>
-      </aside>
-    </div>
-  `;
+  const shell = renderPageShell(container, {
+    breadcrumbs: [
+      { label: 'Knowledge', crumbId: 'root' },
+      { label: catalog, crumbId: 'catalog' },
+      { label: title, current: true },
+    ],
+    titleHtml: `<h1 class="doc-title">${escapeHtml(title)}</h1>`,
+    actionsHtml: `
+      <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
+        ${focusMode ? 'Show info' : 'Hide info'}
+      </button>
+      ${editButton}
+      <button type="button" id="copy-link" class="btn-ghost">Copy link</button>
+      <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
+    `,
+    mainHtml: `
+      <div id="tab-preview" class="markdown-preview reader-preview"></div>
+      <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
+    `,
+    railHtml: renderReadPropertiesRail(doc, fm),
+    focusMode,
+  });
 
-  const previewEl = container.querySelector<HTMLDivElement>('#tab-preview')!;
+  bindFocusToggle(container, focusMode);
+  bindBreadcrumbNavigation(container, {
+    root: () => options.onNavigateRoot?.(),
+    catalog: () => options.onNavigateCatalog?.(),
+  });
+
+  const previewEl = shell.bodySlot.querySelector<HTMLDivElement>('#tab-preview')!;
   if (isStructured) {
     previewEl.innerHTML = renderStructuredPreview(doc.body ?? '', contentKind);
   } else {
@@ -153,11 +148,11 @@ export function renderDocPanel(
     });
   }
 
-  const fmEl = container.querySelector<HTMLDivElement>('#tab-frontmatter')!;
+  const fmEl = shell.railSlot.querySelector<HTMLDivElement>('#tab-frontmatter')!;
   fmEl.innerHTML = `<pre class="frontmatter-yaml"></pre>`;
   fmEl.querySelector('pre')!.textContent = JSON.stringify(fm, null, 2);
 
-  const agentEl = container.querySelector<HTMLDivElement>('#tab-agent')!;
+  const agentEl = shell.railSlot.querySelector<HTMLDivElement>('#tab-agent')!;
   agentEl.innerHTML = `<pre class="agent-json"></pre>`;
   agentEl.querySelector('pre')!.textContent = JSON.stringify(doc.agentShape, null, 2);
 
@@ -169,18 +164,6 @@ export function renderDocPanel(
       btn.classList.add('active');
       container.querySelector(`#tab-${tab}`)?.classList.add('active');
     });
-  });
-
-  container.querySelector<HTMLButtonElement>('#toggle-focus')?.addEventListener('click', () => {
-    const layout = container.querySelector('.page-layout');
-    const btn = container.querySelector<HTMLButtonElement>('#toggle-focus');
-    const next = !layout?.classList.contains('page-layout--focus');
-    layout?.classList.toggle('page-layout--focus', next);
-    saveFocusMode(next);
-    if (btn) {
-      btn.setAttribute('aria-pressed', String(next));
-      btn.textContent = next ? 'Show info' : 'Hide info';
-    }
   });
 
   container.querySelector<HTMLButtonElement>('#copy-path')?.addEventListener('click', () => {
@@ -202,7 +185,7 @@ export function renderDocPanel(
     }
   });
 
-  container.querySelectorAll<HTMLButtonElement>('.related-chip').forEach((chip) => {
+  shell.railSlot.querySelectorAll<HTMLButtonElement>('.related-chip').forEach((chip) => {
     chip.addEventListener('click', () => {
       const slug = chip.dataset.slug;
       if (slug) {
@@ -214,7 +197,7 @@ export function renderDocPanel(
   if (doc.slug && !isStructured) {
     void getBacklinks(doc.slug)
       .then(({ backlinks }) => {
-        const section = container.querySelector<HTMLElement>('#reader-backlinks');
+        const section = shell.bodySlot.querySelector<HTMLElement>('#reader-backlinks');
         if (!section || backlinks.length === 0) {
           return;
         }
@@ -243,12 +226,4 @@ export function renderDocPanel(
         // backlinks are optional enrichment
       });
   }
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }

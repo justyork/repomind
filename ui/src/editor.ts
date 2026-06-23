@@ -1,6 +1,7 @@
 import type { Draft, ListDocsItem } from './api.js';
 import { deleteDraftApi, getDraftDiff, publishDraftApi, updateDraftApi } from './api.js';
-import { catalogLabel } from './catalog.js';
+import { bindEditorProperties, renderEditorPropertiesRail } from './editor-properties.js';
+import { bindFocusToggle, escapeHtml, loadFocusMode, renderPageShell } from './page-shell.js';
 import { suggestRelatedFromBody, type DocCandidate } from './wikilink-autocomplete.js';
 import type { VisualEditorHandle } from './visual-editor.js';
 
@@ -24,122 +25,101 @@ export function renderDraftEditor(
     slug: doc.slug,
     title: doc.title,
   }));
-  const knownSlugs = docCandidates.map((doc) => doc.slug);
   let visualHandle: VisualEditorHandle | null = null;
   let fallbackBody = draft.body;
+  const focusMode = loadFocusMode();
 
-  container.className = 'workspace-main workspace-editor';
-  const catalog = catalogLabel(draft.type);
-  container.innerHTML = `
-    <nav class="breadcrumb" aria-label="Breadcrumb">
-      <span class="crumb">Knowledge</span>
-      <span class="crumb-sep">›</span>
-      <span class="crumb">Drafts</span>
-      <span class="crumb-sep">›</span>
-      <span class="crumb current">${escapeHtml(draft.title || draft.slug)}</span>
-    </nav>
-    <div class="page-layout">
-      <div class="page-content">
-        <header class="page-header">
-          <input id="ed-title" class="title-input doc-title" type="text" placeholder="Document title" />
-          <div class="workspace-actions">
-            <div class="publish-split">
-              <button type="button" id="ed-publish" class="btn-primary publish-main">Publish</button>
-              <button type="button" id="ed-publish-menu-btn" class="btn-primary publish-menu-trigger" aria-haspopup="true" aria-expanded="false">▾</button>
-              <div id="ed-publish-menu" class="publish-menu hidden" role="menu">
-                <button type="button" id="ed-publish-review" role="menuitem">Review changes</button>
-              </div>
-            </div>
-            <button type="button" id="ed-view-md" class="btn-ghost">View markdown</button>
-            <button type="button" id="ed-close" class="btn-ghost">Close</button>
-            <button type="button" id="ed-discard" class="btn-ghost">Discard draft</button>
-          </div>
-        </header>
-        <div id="ed-visual-canvas"></div>
-      </div>
-      <aside class="page-info">
-        <h2 class="page-info-title">Page properties</h2>
-        <div class="workspace-badges editor-badges">
-          <span class="badge badge-draft">draft</span>
-          ${draft.forked_from ? `<span class="badge">fork: ${escapeHtml(draft.forked_from)}</span>` : ''}
-        </div>
-        <div class="meta-grid editor-meta">
-          <div class="field"><label>Slug</label><input id="ed-slug" /></div>
-          <div class="field"><label>Catalog</label><input id="ed-catalog" readonly value="${escapeHtml(catalog)}" /></div>
-          <div class="field"><label>Type</label>
-            <select id="ed-type">
-              <option value="adr">adr</option>
-              <option value="feature-spec">feature-spec</option>
-              <option value="glossary-term">glossary-term</option>
-              <option value="open-question">open-question</option>
-              <option value="agent-instruction">agent-instruction</option>
-              <option value="wiki-page">wiki-page</option>
-            </select>
-          </div>
-          <div class="field"><label>Status</label>
-            <select id="ed-status">
-              <option value="draft">draft</option>
-              <option value="proposed">proposed</option>
-              <option value="accepted">accepted</option>
-              <option value="superseded">superseded</option>
-            </select>
-          </div>
-          <div class="field field-wide"><label>Tags</label><input id="ed-tags" placeholder="comma-separated" /></div>
-          <div class="field field-wide"><label>Related</label><input id="ed-related" list="ed-related-suggestions" placeholder="slug-one, slug-two" /></div>
-        </div>
-        <datalist id="ed-related-suggestions">
-          ${knownSlugs.map((slug) => `<option value="${slug}"></option>`).join('')}
-        </datalist>
-      </aside>
-    </div>
-    <div id="publish-modal" class="modal hidden">
-      <div class="modal-card modal-card-wide">
-        <p>Publish to git as markdown?</p>
-        <code id="publish-target"></code>
-        <pre id="publish-diff" class="diff-preview"></pre>
-        <div id="publish-related" class="publish-related hidden">
-          <p id="publish-related-prompt"></p>
-          <ul id="publish-related-list" class="publish-related-list"></ul>
-          <div class="editor-actions">
-            <button type="button" id="publish-related-apply" class="btn-primary">Add to related</button>
-            <button type="button" id="publish-related-skip" class="btn-ghost">Skip</button>
-          </div>
-        </div>
-        <div class="editor-actions">
-          <button type="button" id="publish-confirm" class="btn-primary">Confirm</button>
-          <button type="button" id="publish-cancel" class="btn-ghost">Cancel</button>
+  const shell = renderPageShell(container, {
+    rootClass: 'workspace-main workspace-editor',
+    breadcrumbs: [
+      { label: 'Knowledge' },
+      { label: 'Drafts' },
+      { label: draft.title || draft.slug, current: true },
+    ],
+    titleHtml: `<input id="ed-title" class="title-input doc-title" type="text" placeholder="Document title" />`,
+    actionsHtml: `
+      <span id="ed-save-status" class="save-status" aria-live="polite"></span>
+      <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
+        ${focusMode ? 'Show info' : 'Hide info'}
+      </button>
+      <div class="publish-split">
+        <button type="button" id="ed-publish" class="btn-primary publish-main">Publish</button>
+        <button type="button" id="ed-publish-menu-btn" class="btn-primary publish-menu-trigger" aria-haspopup="true" aria-expanded="false">▾</button>
+        <div id="ed-publish-menu" class="publish-menu hidden" role="menu">
+          <button type="button" id="ed-publish-review" role="menuitem">Review changes</button>
         </div>
       </div>
-    </div>
-    <div id="view-md-modal" class="modal hidden">
-      <div class="modal-card modal-card-wide">
-        <h3 class="modal-title">Markdown source</h3>
-        <pre id="view-md-content" class="md-source"></pre>
+      <button type="button" id="ed-view-md" class="btn-ghost">View markdown</button>
+      <button type="button" id="ed-close" class="btn-ghost">Close</button>
+      <button type="button" id="ed-discard" class="btn-ghost">Discard draft</button>
+    `,
+    mainHtml: `<div id="ed-visual-canvas"></div>`,
+    railHtml: renderEditorPropertiesRail({
+      forkedFrom: draft.forked_from,
+    }),
+    focusMode,
+  });
+
+  bindFocusToggle(container, focusMode);
+
+  const titleEl = container.querySelector<HTMLInputElement>('#ed-title')!;
+  const saveStatusEl = container.querySelector<HTMLElement>('#ed-save-status')!;
+  const canvasEl = shell.bodySlot.querySelector<HTMLElement>('#ed-visual-canvas')!;
+  const modal = document.createElement('div');
+  modal.id = 'publish-modal';
+  modal.className = 'modal hidden';
+  modal.innerHTML = `
+    <div class="modal-card modal-card-wide">
+      <p>Publish to git as markdown?</p>
+      <code id="publish-target"></code>
+      <pre id="publish-diff" class="diff-preview"></pre>
+      <div id="publish-related" class="publish-related hidden">
+        <p id="publish-related-prompt"></p>
+        <ul id="publish-related-list" class="publish-related-list"></ul>
         <div class="editor-actions">
-          <button type="button" id="view-md-copy" class="btn-primary">Copy</button>
-          <button type="button" id="view-md-close" class="btn-ghost">Close</button>
+          <button type="button" id="publish-related-apply" class="btn-primary">Add to related</button>
+          <button type="button" id="publish-related-skip" class="btn-ghost">Skip</button>
         </div>
+      </div>
+      <div class="editor-actions">
+        <button type="button" id="publish-confirm" class="btn-primary">Confirm</button>
+        <button type="button" id="publish-cancel" class="btn-ghost">Cancel</button>
       </div>
     </div>
   `;
+  container.appendChild(modal);
 
-  const titleEl = container.querySelector<HTMLInputElement>('#ed-title')!;
-  const slugEl = container.querySelector<HTMLInputElement>('#ed-slug')!;
-  const typeEl = container.querySelector<HTMLSelectElement>('#ed-type')!;
-  const statusEl = container.querySelector<HTMLSelectElement>('#ed-status')!;
-  const tagsEl = container.querySelector<HTMLInputElement>('#ed-tags')!;
-  const relatedEl = container.querySelector<HTMLInputElement>('#ed-related')!;
-  const canvasEl = container.querySelector<HTMLElement>('#ed-visual-canvas')!;
-  const modal = container.querySelector<HTMLDivElement>('#publish-modal')!;
-  const viewMdModal = container.querySelector<HTMLDivElement>('#view-md-modal')!;
+  const viewMdModal = document.createElement('div');
+  viewMdModal.id = 'view-md-modal';
+  viewMdModal.className = 'modal hidden';
+  viewMdModal.innerHTML = `
+    <div class="modal-card modal-card-wide">
+      <h3 class="modal-title">Markdown source</h3>
+      <pre id="view-md-content" class="md-source"></pre>
+      <div class="editor-actions">
+        <button type="button" id="view-md-copy" class="btn-primary">Copy</button>
+        <button type="button" id="view-md-close" class="btn-ghost">Close</button>
+      </div>
+    </div>
+  `;
+  container.appendChild(viewMdModal);
+
   const publishMenu = container.querySelector<HTMLDivElement>('#ed-publish-menu')!;
 
   titleEl.value = draft.title;
-  slugEl.value = draft.slug;
-  typeEl.value = draft.type;
-  statusEl.value = draft.status;
-  tagsEl.value = draft.tags.join(', ');
-  relatedEl.value = draft.related.join(', ');
+
+  const properties = bindEditorProperties(
+    shell.railSlot,
+    {
+      slug: draft.slug,
+      type: draft.type,
+      status: draft.status,
+      tags: draft.tags,
+      related: draft.related,
+    },
+    docCandidates,
+    () => scheduleSave(),
+  );
 
   void import('./visual-editor.js').then(({ mountVisualEditor }) => {
     visualHandle = mountVisualEditor(canvasEl, {
@@ -152,33 +132,33 @@ export function renderDraftEditor(
 
   let pendingRelatedSuggestions: string[] = [];
 
-  function parseList(raw: string): string[] {
-    return raw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
-
   function getBody(): string {
     return visualHandle?.getMarkdownBody() ?? fallbackBody;
   }
 
   function buildDraftPayload() {
+    const props = properties.getState();
     return {
       title: titleEl.value,
-      slug: slugEl.value,
-      type: typeEl.value,
-      status: statusEl.value,
-      tags: parseList(tagsEl.value),
-      related: parseList(relatedEl.value),
+      slug: props.slug,
+      type: props.type,
+      status: props.status,
+      tags: props.tags,
+      related: props.related,
       body: getBody(),
     };
   }
 
+  function setSaveStatus(text: string): void {
+    saveStatusEl.textContent = text;
+  }
+
   async function persistDraft(): Promise<void> {
+    setSaveStatus('Saving…');
     const payload = buildDraftPayload();
     fallbackBody = payload.body;
     await updateDraftApi(draft.id, payload);
+    setSaveStatus('Saved');
   }
 
   function scheduleSave(): void {
@@ -188,6 +168,7 @@ export function renderDraftEditor(
     saveTimer = setTimeout(() => {
       saveTimer = null;
       inFlightSave = persistDraft().catch((err: unknown) => {
+        setSaveStatus('');
         callbacks.onError(err instanceof Error ? err.message : 'Autosave failed');
       }) as Promise<void>;
     }, 800);
@@ -198,6 +179,7 @@ export function renderDraftEditor(
       clearTimeout(saveTimer);
       saveTimer = null;
       inFlightSave = persistDraft().catch((err: unknown) => {
+        setSaveStatus('');
         callbacks.onError(err instanceof Error ? err.message : 'Autosave failed');
         throw err;
       }) as Promise<void>;
@@ -208,26 +190,17 @@ export function renderDraftEditor(
     }
   }
 
-  const onMetaInput = () => {
-    const catalogEl = container.querySelector<HTMLInputElement>('#ed-catalog');
-    if (catalogEl) {
-      catalogEl.value = catalogLabel(typeEl.value);
-    }
-    scheduleSave();
-  };
-
-  for (const el of [titleEl, slugEl, typeEl, statusEl, tagsEl, relatedEl]) {
-    el.addEventListener('input', onMetaInput);
-    el.addEventListener('change', onMetaInput);
-  }
+  titleEl.addEventListener('input', () => scheduleSave());
+  titleEl.addEventListener('change', () => scheduleSave());
 
   function showRelatedSuggestions(): void {
     const relatedSection = container.querySelector<HTMLElement>('#publish-related')!;
     const promptEl = container.querySelector<HTMLElement>('#publish-related-prompt')!;
     const listEl = container.querySelector<HTMLElement>('#publish-related-list')!;
+    const props = properties.getState();
     pendingRelatedSuggestions = suggestRelatedFromBody(
       getBody(),
-      parseList(relatedEl.value),
+      props.related,
       docCandidates,
     );
     if (pendingRelatedSuggestions.length === 0) {
@@ -248,11 +221,10 @@ export function renderDraftEditor(
     if (pendingRelatedSuggestions.length === 0) {
       return;
     }
-    const merged = [...new Set([...parseList(relatedEl.value), ...pendingRelatedSuggestions])];
-    relatedEl.value = merged.join(', ');
+    const props = properties.getState();
+    properties.setRelated([...new Set([...props.related, ...pendingRelatedSuggestions])]);
     pendingRelatedSuggestions = [];
     container.querySelector('#publish-related')?.classList.add('hidden');
-    scheduleSave();
   }
 
   container.querySelector<HTMLButtonElement>('#publish-related-apply')?.addEventListener('click', () => {
@@ -291,7 +263,7 @@ export function renderDraftEditor(
   }
 
   function openViewMdModal(): void {
-    const content = container.querySelector<HTMLElement>('#view-md-content')!;
+    const content = viewMdModal.querySelector<HTMLElement>('#view-md-content')!;
     content.textContent = getBody();
     viewMdModal.classList.remove('hidden');
   }
@@ -302,7 +274,8 @@ export function renderDraftEditor(
     showRelatedSuggestions();
     const target = container.querySelector<HTMLElement>('#publish-target')!;
     const diffEl = container.querySelector<HTMLElement>('#publish-diff')!;
-    target.textContent = `docs/.../${slugEl.value}.md`;
+    const props = properties.getState();
+    target.textContent = `docs/.../${props.slug}.md`;
     diffEl.textContent = 'Loading diff…';
 
     try {
@@ -362,7 +335,7 @@ export function renderDraftEditor(
     openViewMdModal();
   });
 
-  container.querySelector<HTMLButtonElement>('#view-md-close')?.addEventListener('click', () => {
+  viewMdModal.querySelector<HTMLButtonElement>('#view-md-close')?.addEventListener('click', () => {
     closeViewMdModal();
   });
 
@@ -372,7 +345,7 @@ export function renderDraftEditor(
     }
   });
 
-  container.querySelector<HTMLButtonElement>('#view-md-copy')?.addEventListener('click', () => {
+  viewMdModal.querySelector<HTMLButtonElement>('#view-md-copy')?.addEventListener('click', () => {
     void navigator.clipboard.writeText(getBody()).catch((err: unknown) => {
       callbacks.onError(err instanceof Error ? err.message : 'Copy failed');
     });
@@ -415,12 +388,4 @@ export function renderDraftEditor(
         callbacks.onError(err instanceof Error ? err.message : 'Delete failed');
       });
   });
-}
-
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
 }
