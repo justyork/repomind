@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "questions": [
+    {
+      "id": "caravan-definition",
+      "prompt": "What is a caravan in the Skyforge Caravan game world?",
+      "anchorSlugs": ["caravan"],
+      "tags": ["factual", "glossary"]
+    },
+    {
+      "id": "expedition-flow",
+      "prompt": "How does an expedition work from departure to return?",
+      "anchorSlugs": ["expedition"],
+      "tags": ["factual", "game-design"]
+    },
+    {
+      "id": "cargo-hold-role",
+      "prompt": "What is the cargo hold used for during a run?",
+      "anchorSlugs": ["cargo-hold"],
+      "tags": ["factual", "game-design"]
+    },
+    {
+      "id": "fuel-tank-mechanic",
+      "prompt": "How does fuel storage and consumption relate to the fuel tank?",
+      "anchorSlugs": ["fuel-tank"],
+      "tags": ["factual", "technical"]
+    },
+    {
+      "id": "dock-work-term",
+      "prompt": "What does dock work mean in game terminology?",
+      "anchorSlugs": ["dock-work-term"],
+      "tags": ["factual", "glossary"]
+    },
+    {
+      "id": "adr-plain-markdown",
+      "prompt": "Why does the project use plain Markdown for knowledge instead of a database?",
+      "anchorSlugs": ["adr-0004-plain-markdown-knowledge"],
+      "tags": ["factual", "adr"]
+    },
+    {
+      "id": "stack-synthesis",
+      "prompt": "What frontend and tooling stack does the caravan client use, and where is it documented?",
+      "anchorSlugs": ["stack-and-versions", "repository-layout"],
+      "tags": ["synthesis", "technical"]
+    },
+    {
+      "id": "contract-crisis-link",
+      "prompt": "How do contracts and crises interact in the expedition loop?",
+      "anchorSlugs": ["contract", "crisis"],
+      "tags": ["synthesis", "game-design"]
+    }
+  ]
+}

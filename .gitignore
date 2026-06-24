@@ -15,6 +15,7 @@ ui/dist/
 # RepoMind runtime
 .project-knowledge/.worktrees/
 ab-demo/results/*.json
+ab-demo/results/*-blind.md
 
 # OS / editor
 .DS_Store

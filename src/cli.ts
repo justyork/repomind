@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runAbEval } from './commands/ab-eval.js';
 import { runCheck } from './commands/check.js';
 import { runExport } from './commands/export.js';
 import { runInit } from './commands/init.js';
@@ -20,6 +21,7 @@ Usage:
   repo-mind prepare [--all] [--dry-run] [--cwd <dir>] [relative-path]
   repo-mind sync-links [--dry-run] [--no-convert-body] [--no-sync-related] [--cwd <dir>]
   repo-mind publish [--pr] [--dry-run] [--draft <id>] [--message <text>] [--title <text>] [--body <text>] [--cwd <dir>]
+  repo-mind ab-eval --cwd <dir> [--questions <path>] [--output <path>] [--dry-run]
   repo-mind mcp
   repo-mind ui [--port <n>] [--cwd <dir>]
 
@@ -31,6 +33,7 @@ Commands:
   prepare Add RepoMind frontmatter to markdown files (--all for batch)
   sync-links Convert markdown links to wikilinks and sync related frontmatter
   publish   Publish active drafts to docs/; --pr opens a GitHub pull request
+  ab-eval   Live A/B eval on a project docs/ corpus (skyforge dogfood gate)
   mcp     Start the MCP stdio server
   ui      Confluence-style workspace over docs/ (127.0.0.1)
 `);
@@ -109,6 +112,36 @@ function parseArgs(argv: string[]): {
       i += 1;
       continue;
     }
+    if (arg === '--questions' && rest[i + 1]) {
+      flags.questions = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--output' && rest[i + 1]) {
+      flags.output = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--record-scores' && rest[i + 1]) {
+      flags.recordScores = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--scores' && rest[i + 1]) {
+      flags.scores = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--baseline-transcript' && rest[i + 1]) {
+      flags.baselineTranscript = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--repomind-transcript' && rest[i + 1]) {
+      flags.repomindTranscript = rest[i + 1];
+      i += 1;
+      continue;
+    }
     if (arg === '--help' || arg === '-h') {
       flags.help = true;
     }
@@ -136,6 +169,12 @@ async function main(): Promise<void> {
       argv[index - 1] !== '--title' &&
       argv[index - 1] !== '--body' &&
       argv[index - 1] !== '--draft' &&
+      argv[index - 1] !== '--questions' &&
+      argv[index - 1] !== '--output' &&
+      argv[index - 1] !== '--record-scores' &&
+      argv[index - 1] !== '--scores' &&
+      argv[index - 1] !== '--baseline-transcript' &&
+      argv[index - 1] !== '--repomind-transcript' &&
       arg !== argv[1],
   );
 
@@ -176,6 +215,27 @@ async function main(): Promise<void> {
           dryRun: flags.dryRun === true,
           convertBody: flags.noConvertBody !== true,
           syncRelated: flags.noSyncRelated !== true,
+        }),
+      );
+      break;
+    case 'ab-eval':
+      process.exit(
+        runAbEval({
+          cwd,
+          questions: typeof flags.questions === 'string' ? flags.questions : undefined,
+          output: typeof flags.output === 'string' ? flags.output : undefined,
+          dryRun: flags.dryRun === true,
+          recordScores:
+            typeof flags.recordScores === 'string' ? flags.recordScores : undefined,
+          scoresFile: typeof flags.scores === 'string' ? flags.scores : undefined,
+          baselineTranscript:
+            typeof flags.baselineTranscript === 'string'
+              ? flags.baselineTranscript
+              : undefined,
+          repomindTranscript:
+            typeof flags.repomindTranscript === 'string'
+              ? flags.repomindTranscript
+              : undefined,
         }),
       );
       break;

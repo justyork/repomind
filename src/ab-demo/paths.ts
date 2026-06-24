@@ -40,3 +40,7 @@ export function resultsDir(abDemoRoot: string): string {
 export function scoreRubricPath(abDemoRoot: string): string {
   return path.join(abDemoRoot, 'score-hallucination.md');
 }
+
+export function skyforgeQuestionsPath(abDemoRoot: string): string {
+  return path.join(abDemoRoot, 'skyforge-questions.json');
+}
