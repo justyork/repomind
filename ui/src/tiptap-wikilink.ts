@@ -1,6 +1,7 @@
 import { Node, mergeAttributes } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
-import { filterDocCandidates, type DocCandidate } from './wikilink-autocomplete.js';
+import type { DocCandidate } from './wikilink-autocomplete.js';
+import { createWikilinkInlineMenu, type WikilinkPick } from './wikilink-ui.js';
 
 export interface WikilinkOptions {
   HTMLAttributes: Record<string, string>;
@@ -10,6 +11,7 @@ declare module '@tiptap/core' {
   interface Commands<ReturnType> {
     wikilink: {
       insertWikilink: (attrs: { slug: string; label: string }) => ReturnType;
+      updateWikilink: (attrs: { slug: string; label: string }) => ReturnType;
     };
   }
 }
@@ -39,12 +41,15 @@ export const Wikilink = Node.create<WikilinkOptions>({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    const label = String(node.attrs.label || node.attrs.slug);
+    const slug = String(node.attrs.slug ?? '');
+    const label = String(node.attrs.label || slug);
+    const title = label === slug ? `[[${slug}]]` : `[[${label}|${slug}]]`;
     return [
       'span',
       mergeAttributes(this.options.HTMLAttributes, HTMLAttributes, {
-        'data-wikilink-slug': node.attrs.slug,
+        'data-wikilink-slug': slug,
         class: 'wikilink-chip',
+        title,
       }),
       label,
     ];
@@ -65,99 +70,56 @@ export const Wikilink = Node.create<WikilinkOptions>({
         (attrs) =>
         ({ commands }) =>
           commands.insertContent({ type: this.name, attrs }),
+      updateWikilink:
+        (attrs) =>
+        ({ commands }) =>
+          commands.updateAttributes(this.name, attrs),
     };
   },
 });
 
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-function escapeAttr(text: string): string {
-  return escapeHtml(text).replace(/"/g, '&quot;');
-}
-
 export function bindTiptapWikilinkAutocomplete(editor: Editor, docs: DocCandidate[]): () => void {
-  const menu = document.createElement('div');
-  menu.className = 'wikilink-menu hidden';
-  document.body.appendChild(menu);
-
   let activeFrom = -1;
 
-  function closeMenu(): void {
-    menu.classList.add('hidden');
-    menu.innerHTML = '';
-    activeFrom = -1;
-  }
-
-  function positionMenu(): void {
-    const view = editor.view;
-    const coords = view.coordsAtPos(editor.state.selection.from);
-    menu.style.top = `${coords.bottom + 4}px`;
-    menu.style.left = `${coords.left}px`;
-    menu.style.minWidth = '220px';
-  }
-
-  function insertSlug(slug: string): void {
+  const inlineMenu = createWikilinkInlineMenu((pick: WikilinkPick) => {
     if (activeFrom < 0) {
+      editor.chain().focus().insertWikilink(pick).run();
       return;
     }
     const to = editor.state.selection.from;
-    editor
-      .chain()
-      .focus()
-      .deleteRange({ from: activeFrom, to })
-      .insertWikilink({ slug, label: slug })
-      .run();
-    closeMenu();
-  }
-
-  function renderMenu(query: string): void {
-    const matches = filterDocCandidates(query, docs);
-    if (matches.length === 0) {
-      closeMenu();
-      return;
-    }
-    menu.innerHTML = matches
-      .map(
-        (doc) =>
-          `<button type="button" class="wikilink-option" data-slug="${escapeAttr(doc.slug)}">
-            <span class="wikilink-option-slug">${escapeHtml(doc.slug)}</span>
-            <span class="wikilink-option-title">${escapeHtml(doc.title)}</span>
-          </button>`,
-      )
-      .join('');
-    positionMenu();
-    menu.classList.remove('hidden');
-
-    menu.querySelectorAll<HTMLButtonElement>('.wikilink-option').forEach((button) => {
-      button.addEventListener('mousedown', (event) => {
-        event.preventDefault();
-        insertSlug(button.dataset.slug ?? '');
-      });
-    });
-  }
+    editor.chain().focus().deleteRange({ from: activeFrom, to }).insertWikilink(pick).run();
+    activeFrom = -1;
+  });
 
   function detectTrigger(): void {
     const { from } = editor.state.selection;
     const textBefore = editor.state.doc.textBetween(Math.max(0, from - 80), from, '\n', '\0');
     const match = /\[\[([^\]]*)$/.exec(textBefore);
     if (!match) {
-      closeMenu();
+      if (!inlineMenu.element.classList.contains('hidden')) {
+        inlineMenu.element.classList.add('hidden');
+        inlineMenu.element.innerHTML = '';
+      }
+      activeFrom = -1;
       return;
     }
     activeFrom = from - match[0].length;
-    renderMenu(match[1] ?? '');
+    inlineMenu.render(match[1] ?? '', docs);
+    const coords = editor.view.coordsAtPos(from);
+    inlineMenu.positionAt(coords.left, coords.bottom);
   }
 
   editor.on('update', detectTrigger);
   editor.on('selectionUpdate', detectTrigger);
 
   const onBlur = () => {
-    setTimeout(closeMenu, 120);
+    setTimeout(() => {
+      if (!inlineMenu.element.matches(':hover')) {
+        inlineMenu.element.classList.add('hidden');
+        inlineMenu.element.innerHTML = '';
+        activeFrom = -1;
+      }
+    }, 150);
   };
   editor.view.dom.addEventListener('blur', onBlur);
 
@@ -165,6 +127,6 @@ export function bindTiptapWikilinkAutocomplete(editor: Editor, docs: DocCandidat
     editor.off('update', detectTrigger);
     editor.off('selectionUpdate', detectTrigger);
     editor.view.dom.removeEventListener('blur', onBlur);
-    menu.remove();
+    inlineMenu.close();
   };
 }
