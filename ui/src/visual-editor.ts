@@ -12,9 +12,23 @@ import TableCell from '@tiptap/extension-table-cell';
 import TableHeader from '@tiptap/extension-table-header';
 import { uploadAsset } from './api.js';
 import { parseMarkdownToDoc, serializeDocToMarkdown } from './markdown-roundtrip.js';
-import { bindMermaidEditorPreviews } from './tiptap-mermaid-preview.js';
 import { bindTiptapSlashMenu } from './tiptap-slash-menu.js';
 import { bindTiptapWikilinkAutocomplete, Wikilink } from './tiptap-wikilink.js';
+import {
+  bindBubbleMenuActions,
+  bubbleMenuExtension,
+  createBubbleMenuElement,
+} from './tiptap-bubble-menu.js';
+import {
+  bindMermaidThemeRefresh,
+  MermaidPreviewExtension,
+} from './tiptap-mermaid-preview.js';
+import { bindVisualToolbar, buildVisualToolbarHtml } from './tiptap-toolbar.js';
+import {
+  getSelectedWikilinkAttrs,
+  openWikilinkPicker,
+  type WikilinkPick,
+} from './wikilink-ui.js';
 import type { DocCandidate } from './wikilink-autocomplete.js';
 
 export interface VisualEditorOptions {
@@ -29,34 +43,6 @@ export interface VisualEditorHandle {
   destroy: () => void;
 }
 
-function toolbarButton(label: string, action: string, title?: string): string {
-  const titleAttr = title ? ` title="${title}"` : '';
-  return `<button type="button" class="toolbar-btn" data-action="${action}"${titleAttr}>${label}</button>`;
-}
-
-function buildToolbarHtml(): string {
-  return `
-    <div class="editor-toolbar visual-toolbar" role="toolbar" aria-label="Formatting">
-      ${toolbarButton('H1', 'h1')}
-      ${toolbarButton('H2', 'h2')}
-      ${toolbarButton('H3', 'h3')}
-      <span class="editor-toolbar-sep"></span>
-      ${toolbarButton('B', 'bold', 'Bold')}
-      ${toolbarButton('I', 'italic', 'Italic')}
-      ${toolbarButton('Link', 'link')}
-      <span class="editor-toolbar-sep"></span>
-      ${toolbarButton('• List', 'bullet')}
-      ${toolbarButton('1. List', 'ordered')}
-      ${toolbarButton('☐ Task', 'task')}
-      ${toolbarButton('Table', 'table')}
-      <span class="editor-toolbar-sep"></span>
-      ${toolbarButton('[[', 'wikilink', 'Insert wikilink')}
-      ${toolbarButton('Image', 'image')}
-      ${toolbarButton('Mermaid', 'mermaid', 'Insert mermaid diagram')}
-    </div>
-  `;
-}
-
 const MERMAID_STARTER = 'graph LR\n  A --> B';
 
 export function mountVisualEditor(
@@ -64,9 +50,13 @@ export function mountVisualEditor(
   options: VisualEditorOptions,
 ): VisualEditorHandle {
   container.className = 'visual-canvas';
-  container.innerHTML = `${buildToolbarHtml()}<div class="visual-editor-mount"></div>`;
+  const bubbleMenuEl = createBubbleMenuElement();
+  const inWorkspaceEditor = Boolean(container.closest('.workspace-editor'));
+  container.innerHTML = `${buildVisualToolbarHtml(!inWorkspaceEditor)}<div class="visual-editor-mount"></div>`;
+  container.appendChild(bubbleMenuEl);
 
   const mountEl = container.querySelector<HTMLElement>('.visual-editor-mount')!;
+  const toolbar = container.querySelector<HTMLElement>('.visual-toolbar')!;
   const doc = parseMarkdownToDoc(options.initialMarkdown);
 
   const editor = new Editor({
@@ -91,15 +81,30 @@ export function mountVisualEditor(
       TaskList,
       TaskItem.configure({ nested: true }),
       Wikilink,
+      bubbleMenuExtension(bubbleMenuEl),
+      MermaidPreviewExtension,
     ],
     content: doc,
+    onFocus: () => {
+      toolbar.classList.remove('visual-toolbar--collapsed');
+    },
+    onBlur: () => {
+      if (inWorkspaceEditor) {
+        return;
+      }
+      window.setTimeout(() => {
+        if (!container.contains(document.activeElement)) {
+          toolbar.classList.add('visual-toolbar--collapsed');
+        }
+      }, 120);
+    },
     onUpdate: () => {
       options.onBodyChange();
     },
   });
 
   const unbindAutocomplete = bindTiptapWikilinkAutocomplete(editor, options.docCandidates);
-  const unbindMermaid = bindMermaidEditorPreviews(editor, mountEl);
+  const unbindMermaidTheme = bindMermaidThemeRefresh(editor);
 
   function insertImage(): void {
     const input = document.createElement('input');
@@ -121,16 +126,32 @@ export function mountVisualEditor(
     input.click();
   }
 
-  function insertWikilink(): void {
-    const slug = window.prompt('Wikilink slug');
-    if (!slug?.trim()) {
+  function applyWikilinkPick(pick: WikilinkPick): void {
+    const existing = getSelectedWikilinkAttrs(editor);
+    if (existing) {
+      editor.chain().focus().updateWikilink(pick).run();
       return;
     }
-    const trimmed = slug.trim();
-    editor.chain().focus().insertWikilink({ slug: trimmed, label: trimmed }).run();
+    editor.chain().focus().insertWikilink(pick).run();
+  }
+
+  function insertWikilink(): void {
+    const existing = getSelectedWikilinkAttrs(editor);
+    openWikilinkPicker({
+      docs: options.docCandidates,
+      title: existing ? 'Edit page link' : 'Link to page',
+      initialQuery: existing?.slug,
+      initialLabel: existing?.label,
+      onSelect: applyWikilinkPick,
+    });
   }
 
   function insertMermaid(): void {
+    const { $from } = editor.state.selection;
+    const parent = $from.parent;
+    if (parent.type.name === 'codeBlock' && parent.attrs.language === 'mermaid') {
+      return;
+    }
     editor
       .chain()
       .focus()
@@ -151,74 +172,47 @@ export function mountVisualEditor(
     onTable: insertTable,
   });
 
-  const toolbar = container.querySelector<HTMLElement>('.visual-toolbar')!;
-  toolbar.addEventListener('click', (event) => {
-    const target = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-action]');
-    if (!target) {
+  const unbindBubble = bindBubbleMenuActions(editor, bubbleMenuEl, {
+    onWikilink: insertWikilink,
+  });
+
+  const unbindToolbar = bindVisualToolbar(editor, toolbar, {
+    onImage: insertImage,
+    onWikilink: insertWikilink,
+    onTable: insertTable,
+    onMermaid: insertMermaid,
+  });
+
+  const onWikilinkChipDblClick = (event: MouseEvent): void => {
+    const chip = (event.target as HTMLElement).closest<HTMLElement>('[data-wikilink-slug]');
+    if (!chip) {
       return;
     }
-    const action = target.dataset.action;
-    switch (action) {
-      case 'h1':
-        editor.chain().focus().toggleHeading({ level: 1 }).run();
-        break;
-      case 'h2':
-        editor.chain().focus().toggleHeading({ level: 2 }).run();
-        break;
-      case 'h3':
-        editor.chain().focus().toggleHeading({ level: 3 }).run();
-        break;
-      case 'bold':
-        editor.chain().focus().toggleBold().run();
-        break;
-      case 'italic':
-        editor.chain().focus().toggleItalic().run();
-        break;
-      case 'link': {
-        const previous = editor.getAttributes('link').href as string | undefined;
-        const href = window.prompt('URL', previous ?? 'https://');
-        if (href === null) {
-          break;
-        }
-        if (href === '') {
-          editor.chain().focus().extendMarkRange('link').unsetLink().run();
-          break;
-        }
-        editor.chain().focus().extendMarkRange('link').setLink({ href }).run();
-        break;
-      }
-      case 'bullet':
-        editor.chain().focus().toggleBulletList().run();
-        break;
-      case 'ordered':
-        editor.chain().focus().toggleOrderedList().run();
-        break;
-      case 'task':
-        editor.chain().focus().toggleTaskList().run();
-        break;
-      case 'table':
-        insertTable();
-        break;
-      case 'wikilink':
-        insertWikilink();
-        break;
-      case 'image':
-        insertImage();
-        break;
-      case 'mermaid':
-        insertMermaid();
-        break;
-      default:
-        break;
-    }
-  });
+    event.preventDefault();
+    const slug = chip.getAttribute('data-wikilink-slug') ?? '';
+    const label = chip.textContent?.trim() || slug;
+    const pos = editor.view.posAtDOM(chip, 0);
+    editor.chain().focus().setNodeSelection(pos).run();
+    openWikilinkPicker({
+      docs: options.docCandidates,
+      title: 'Edit page link',
+      initialQuery: slug,
+      initialLabel: label,
+      onSelect: applyWikilinkPick,
+    });
+  };
+  mountEl.addEventListener('dblclick', onWikilinkChipDblClick);
 
   return {
     getMarkdownBody: () => serializeDocToMarkdown(editor.getJSON()),
     destroy: () => {
-      unbindMermaid();
+      mountEl.removeEventListener('dblclick', onWikilinkChipDblClick);
+      unbindToolbar();
+      unbindMermaidTheme();
       unbindSlashMenu();
+      unbindBubble();
       unbindAutocomplete();
+      bubbleMenuEl.remove();
       editor.destroy();
     },
   };
