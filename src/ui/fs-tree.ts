@@ -27,6 +27,8 @@ export interface TreeFolderNode {
   emoji: string | null;
   /** Slug of README.md index page for this folder. */
   indexPageSlug: string | null;
+  indexPageType: string | null;
+  indexPageContentKind: 'markdown' | 'yaml' | 'json' | null;
   children: TreeNode[];
 }
 
@@ -82,9 +84,13 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
   const readmeRel = readmeIndexRelativePath(relativePath);
 
   let indexPageSlug: string | null = null;
+  let indexPageType: string | null = null;
+  let indexPageContentKind: 'markdown' | 'yaml' | 'json' | null = null;
   const readmeDoc = ctx.docsByRelative.get(readmeRel);
   if (readmeDoc) {
     indexPageSlug = readmeDoc.slug;
+    indexPageType = readmeDoc.type;
+    indexPageContentKind = readmeDoc.contentKind;
   }
 
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
@@ -129,6 +135,8 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
     relativePath,
     emoji: catalogEmoji(ctx.meta, relativePath),
     indexPageSlug,
+    indexPageType,
+    indexPageContentKind,
     children,
   };
 }

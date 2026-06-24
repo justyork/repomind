@@ -131,6 +131,8 @@ title: Legacy Index
     const tree = buildDocsTree(index);
     expect(tree).not.toBeNull();
     expect(tree!.indexPageSlug).toBe('knowledge-readme');
+    expect(tree!.indexPageType).toBe('wiki-page');
+    expect(tree!.indexPageContentKind).toBe('markdown');
 
     const specs = tree!.children.find((child) => child.kind === 'folder' && child.relativePath === 'specs');
     expect(specs?.kind).toBe('folder');
@@ -138,6 +140,7 @@ title: Legacy Index
       return;
     }
     expect(specs.indexPageSlug).toBe('specs-readme');
+    expect(specs.indexPageType).toBe('feature-spec');
     expect(specs.children.some((child) => child.kind === 'page' && child.relativePath === 'specs/README.md')).toBe(
       false,
     );
