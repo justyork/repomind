@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.0] - 2026-06-24
+
+### Added
+
+- **Unified read/edit page workspace** — click title or body on a published page to fork a draft and edit in-place with TipTap (no layout swap)
+- **Confluence-style formatting toolbar** — sticky toolbar with grouped actions, overflow menu, and Lucide icons
+- **Selection bubble menu** — Bold, Italic, Link, headings, and lists on text selection
+- **Wikilink picker** — modal search UI and `[[` inline autocomplete with keyboard navigation (replaces `window.prompt`)
+- **Flat tree icons** — folders with a readable `README.md` show a page icon instead of a folder icon
+
+### Changed
+
+- **Mermaid preview** — ProseMirror widget decorations (fixes infinite block insertion on re-render)
+- **Editor action bar** — Editing badge, primary Publish, ghost secondary actions
+- **Reader hover targets** — padded editable title/body regions in read mode
+- **Dark theme links** — improved link contrast in reader and editor
+
 ## [0.6.1] - 2026-06-24
 
 ### Added
