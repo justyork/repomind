@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.6.1] - 2026-06-24
+
+### Added
+
+- **`repo-mind ab-eval` CLI** — live A/B eval on a real `docs/` tree (baseline vs RepoMind retrieval)
+- **Skyforge question pack** (`ab-demo/skyforge-questions.json`) — 8 anchors across factual, synthesis, glossary/ADR categories
+- **Blind pack export** — `*-blind.md` for human hallucination scoring; `--record-scores` merges rubric JSON
+- **Transcript token parser** — `record-transcript` for agent-run JSONL token accounting
+- **`npm run ab-eval:live`** — convenience script for skyforge-caravan dogfood target
+
 ## [0.6.0] - 2026-06-24
 
 ### Added

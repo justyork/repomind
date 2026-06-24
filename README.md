@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.6.0** — agent write path: `create_draft` MCP (SQLite drafts, kill-switch gated), `repo-mind publish --pr`. Prior: WYSIWYG editor, keyboard nav, image upload, domain labels, `ab-demo` harness.
+**v0.6.1** — live A/B eval (`repo-mind ab-eval`) for kill-switch proof on real `docs/`. Also: `create_draft` MCP, `publish --pr` (0.6.0). Prior: WYSIWYG editor, keyboard nav, domain labels.
 
 | Artifact | Location |
 |----------|----------|
@@ -50,6 +50,7 @@ Then ask your agent a project question — it should call `search_docs` / `get_d
 | `repo-mind mcp` | Start the MCP stdio server |
 | `repo-mind ui` | Confluence-style workspace over `docs/` (127.0.0.1:3847) |
 | `npm run ab-demo` | Validate A/B demo fixture (repo checkout only) |
+| `repo-mind ab-eval` | Live A/B eval on project `docs/` (skyforge dogfood gate) |
 
 ## Cursor skill
 
