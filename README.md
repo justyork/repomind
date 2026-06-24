@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.4.2** — visual WYSIWYG editor (TipTap), PageShell reader/editor chrome, properties chips, slash menu, GFM tables, mermaid live preview in editor. Keyboard nav, image upload, domain labels, `ab-demo` harness.
+**v0.6.0** — agent write path: `create_draft` MCP (SQLite drafts, kill-switch gated), `repo-mind publish --pr`. Prior: WYSIWYG editor, keyboard nav, image upload, domain labels, `ab-demo` harness.
 
 | Artifact | Location |
 |----------|----------|
@@ -46,6 +46,7 @@ Then ask your agent a project question — it should call `search_docs` / `get_d
 | `repo-mind prepare` | Add frontmatter to legacy markdown (`--all` for batch) |
 | `repo-mind sync-links` | Convert markdown links to wikilinks; sync `related:` |
 | `repo-mind export` | Write `agents.md` to repo root |
+| `repo-mind publish` | Publish active drafts to `docs/`; `--pr` opens a GitHub pull request |
 | `repo-mind mcp` | Start the MCP stdio server |
 | `repo-mind ui` | Confluence-style workspace over `docs/` (127.0.0.1:3847) |
 | `npm run ab-demo` | Validate A/B demo fixture (repo checkout only) |
@@ -80,6 +81,7 @@ Binds **127.0.0.1** only. MCP reads published files in `docs/` only (not SQLite 
 - `get_doc` — fetch one doc by slug
 - `get_glossary_term` — resolve glossary entries
 - `explore_graph` — BFS over `related:` links
+- `create_draft` — create a SQLite draft for human review (gated on kill-switch pass)
 
 ## CI
 
@@ -103,7 +105,7 @@ This repo is developed with [gstack](https://github.com/garrytan/gstack). Projec
 
 ## Roadmap
 
-See [`docs/product/wiki/roadmap.md`](docs/product/wiki/roadmap.md) for v4.0–v4.2 phases. Next: v4.1 keyboard nav and image upload; v4.2 agent write (gated on kill-switch).
+See [`docs/product/wiki/roadmap.md`](docs/product/wiki/roadmap.md) for v4.0–v4.2 phases. v4.2 agent write shipped in 0.6.0 (gated); next: v4.0 prove closure (dogfood + hallucination scoring).
 
 ## License
 
