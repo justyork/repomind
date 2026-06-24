@@ -6,6 +6,24 @@ export function isValidSlug(slug: string): boolean {
   return SLUG_PATTERN.test(slug);
 }
 
+/** Derives a kebab-case slug from a human title. */
+export function slugFromTitle(title: string): string {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  if (isValidSlug(normalized)) {
+    return normalized;
+  }
+
+  const fallback = normalized ? `draft-${normalized}` : 'draft';
+  const trimmed = fallback.slice(0, 80).replace(/-+$/g, '');
+  return isValidSlug(trimmed) ? trimmed : 'draft';
+}
+
 /** Builds a stable slug from a path relative to the docs root. */
 export function slugFromRelativePath(relativePath: string): string {
   const normalized = relativePath
