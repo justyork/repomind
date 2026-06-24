@@ -8,6 +8,7 @@ import { getPackageVersion } from '../package-version.js';
 import { DocIndex } from '../index/doc-index.js';
 import { DOC_TYPES, DOC_STATUSES, DOC_DOMAINS } from '../index/types.js';
 import { exploreGraph } from '../tools/explore-graph.js';
+import { createDraft } from '../tools/create-draft.js';
 import { getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
@@ -19,6 +20,7 @@ const TOOL_NAMES = [
   'get_doc',
   'get_glossary_term',
   'explore_graph',
+  'create_draft',
 ] as const;
 
 type ToolName = (typeof TOOL_NAMES)[number];
@@ -98,6 +100,24 @@ export async function startMcpServer(): Promise<void> {
           required: ['slug'],
         },
       },
+      {
+        name: 'create_draft',
+        description:
+          'Create a SQLite-backed draft for human review in repo-mind UI (gated on ab-demo kill-switch or REPOMIND_AGENT_WRITE=1).',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            type: { type: 'string', enum: [...DOC_TYPES] },
+            title: { type: 'string' },
+            body: { type: 'string' },
+            slug: { type: 'string' },
+            related: { type: 'array', items: { type: 'string' } },
+            tags: { type: 'array', items: { type: 'string' } },
+            forked_from: { type: 'string' },
+          },
+          required: ['type', 'title', 'body'],
+        },
+      },
     ],
   }));
 
@@ -155,6 +175,21 @@ export async function startMcpServer(): Promise<void> {
             depth: typeof args.depth === 'number' ? args.depth : undefined,
           }),
         );
+      case 'create_draft': {
+        const result = createDraft(index, {
+          type: typeof args.type === 'string' ? args.type : '',
+          title: typeof args.title === 'string' ? args.title : '',
+          body: typeof args.body === 'string' ? args.body : '',
+          slug: typeof args.slug === 'string' ? args.slug : undefined,
+          related: Array.isArray(args.related) ? (args.related as string[]) : undefined,
+          tags: Array.isArray(args.tags) ? (args.tags as string[]) : undefined,
+          forked_from: typeof args.forked_from === 'string' ? args.forked_from : undefined,
+        });
+        if (!result.ok) {
+          return toolError(result.error);
+        }
+        return toolResult(result.data);
+      }
       default: {
         const unknownTool: never = toolName;
         throw new Error(`Unknown tool: ${unknownTool}`);
@@ -185,5 +220,12 @@ export async function startMcpServer(): Promise<void> {
 function toolResult(payload: unknown) {
   return {
     content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+  };
+}
+
+function toolError(error: { code: string; message: string; hint?: string }) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error }) }],
+    isError: true,
   };
 }

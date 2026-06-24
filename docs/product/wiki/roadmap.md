@@ -24,7 +24,7 @@ Single source of truth for release phases. Engineering detail: [v4 eng spec](../
 | **v3** | README folder index, deep links (`?slug=`), yaml/json reader, image serving via `/api/assets/` |
 | **v3+** | Documentation domains (`product/`, `technical/`, `game-design/`, …), `repomind-docs` authoring skill |
 
-Package version on `main`: **0.4.2** (0.4.1: PageShell + properties chips; 0.4.2: editor tables + mermaid preview)
+Package version on `main`: **0.6.0** (0.4.1: PageShell + properties chips; 0.4.2: editor tables + mermaid preview; 0.6.0: agent write)
 
 ## v4.0 — Prove (in progress)
 
@@ -67,8 +67,8 @@ Ship **only if** kill-switch passes (tokens + hallucinations).
 
 | ID | Feature | Notes |
 |----|---------|-------|
-| E4 | `create_draft` MCP tool | Git worktree + branch; design in approved v1 doc |
-| E5 | `publish --pr` + optional CI check workflow | Requires `gh`, clean git state |
+| E4 | `create_draft` MCP tool | **Done** (0.6.0) — SQLite drafts + kill-switch gate; `REPOMIND_AGENT_WRITE=1` override |
+| E5 | `publish --pr` + optional CI check workflow | **Done** (0.6.0) — `repo-mind publish --pr`; CI workflow still optional |
 
 ## Not in scope (this cycle)
 

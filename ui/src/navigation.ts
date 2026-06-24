@@ -1,5 +1,6 @@
 const SLUG_PARAM = 'slug';
 const PATH_PARAM = 'path';
+const DRAFT_PARAM = 'draft';
 
 export function readSlugFromUrl(): string | null {
   const slug = new URLSearchParams(window.location.search).get(SLUG_PARAM);
@@ -9,6 +10,11 @@ export function readSlugFromUrl(): string | null {
 export function readPathFromUrl(): string | null {
   const relativePath = new URLSearchParams(window.location.search).get(PATH_PARAM);
   return relativePath?.trim() ? relativePath.trim().replace(/\\/g, '/') : null;
+}
+
+export function readDraftIdFromUrl(): string | null {
+  const draftId = new URLSearchParams(window.location.search).get(DRAFT_PARAM);
+  return draftId?.trim() ? draftId.trim() : null;
 }
 
 /** SPA lives at `/`; strip accidental path segments from relative link navigation. */
@@ -34,6 +40,13 @@ export function buildPageUrl(slug: string): string {
   const url = appRootUrl();
   url.search = '';
   url.searchParams.set(SLUG_PARAM, slug);
+  return url.toString();
+}
+
+export function buildDraftUrl(draftId: string): string {
+  const url = appRootUrl();
+  url.search = '';
+  url.searchParams.set(DRAFT_PARAM, draftId);
   return url.toString();
 }
 

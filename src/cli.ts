@@ -3,6 +3,7 @@ import { runCheck } from './commands/check.js';
 import { runExport } from './commands/export.js';
 import { runInit } from './commands/init.js';
 import { runPrepare } from './commands/prepare.js';
+import { runPublish } from './commands/publish.js';
 import { runSetup } from './commands/setup.js';
 import { runSyncLinks } from './commands/sync-links.js';
 import { runUi } from './commands/ui.js';
@@ -18,6 +19,7 @@ Usage:
   repo-mind export [--force] [--cwd <dir>]
   repo-mind prepare [--all] [--dry-run] [--cwd <dir>] [relative-path]
   repo-mind sync-links [--dry-run] [--no-convert-body] [--no-sync-related] [--cwd <dir>]
+  repo-mind publish [--pr] [--dry-run] [--draft <id>] [--message <text>] [--title <text>] [--body <text>] [--cwd <dir>]
   repo-mind mcp
   repo-mind ui [--port <n>] [--cwd <dir>]
 
@@ -28,6 +30,7 @@ Commands:
   export  Write agents.md export to repo root
   prepare Add RepoMind frontmatter to markdown files (--all for batch)
   sync-links Convert markdown links to wikilinks and sync related frontmatter
+  publish   Publish active drafts to docs/; --pr opens a GitHub pull request
   mcp     Start the MCP stdio server
   ui      Confluence-style workspace over docs/ (127.0.0.1)
 `);
@@ -44,6 +47,10 @@ function parseArgs(argv: string[]): {
     const arg = rest[i];
     if (arg === '--all') {
       flags.all = true;
+      continue;
+    }
+    if (arg === '--pr') {
+      flags.pr = true;
       continue;
     }
     if (arg === '--dry-run') {
@@ -80,6 +87,28 @@ function parseArgs(argv: string[]): {
       i += 1;
       continue;
     }
+    if (arg === '--message' && rest[i + 1]) {
+      flags.message = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--title' && rest[i + 1]) {
+      flags.title = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--body' && rest[i + 1]) {
+      flags.body = rest[i + 1];
+      i += 1;
+      continue;
+    }
+    if (arg === '--draft' && rest[i + 1]) {
+      const existing = flags.draft;
+      const next = rest[i + 1];
+      flags.draft = existing ? `${existing},${next}` : next;
+      i += 1;
+      continue;
+    }
     if (arg === '--help' || arg === '-h') {
       flags.help = true;
     }
@@ -103,6 +132,10 @@ async function main(): Promise<void> {
       !arg.startsWith('-') &&
       argv[index - 1] !== '--cwd' &&
       argv[index - 1] !== '--port' &&
+      argv[index - 1] !== '--message' &&
+      argv[index - 1] !== '--title' &&
+      argv[index - 1] !== '--body' &&
+      argv[index - 1] !== '--draft' &&
       arg !== argv[1],
   );
 
@@ -143,6 +176,23 @@ async function main(): Promise<void> {
           dryRun: flags.dryRun === true,
           convertBody: flags.noConvertBody !== true,
           syncRelated: flags.noSyncRelated !== true,
+        }),
+      );
+      break;
+    case 'publish':
+      process.exit(
+        runPublish({
+          cwd,
+          pr: flags.pr === true,
+          dryRun: flags.dryRun === true,
+          message: typeof flags.message === 'string' ? flags.message : undefined,
+          prTitle: typeof flags.title === 'string' ? flags.title : undefined,
+          prBody: typeof flags.body === 'string' ? flags.body : undefined,
+          draftIds:
+            typeof flags.draft === 'string'
+              ? flags.draft.split(',').map((id) => id.trim()).filter(Boolean)
+              : undefined,
+          skipPush: process.env.REPOMIND_PUBLISH_SKIP_REMOTE === '1',
         }),
       );
       break;

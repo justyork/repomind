@@ -21,6 +21,7 @@ import { renderTreeSidebar } from './tree-sidebar.js';
 import { subscribeDocsReload } from './live-reload.js';
 import {
   normalizeAppUrl,
+  readDraftIdFromUrl,
   readPathFromUrl,
   readSlugFromUrl,
   subscribePopState,
@@ -354,7 +355,15 @@ async function main(): Promise<void> {
     renderDocPanel(workspaceEl, null);
 
     const slugFromUrl = readSlugFromUrl();
-    if (slugFromUrl) {
+    const draftIdFromUrl = readDraftIdFromUrl();
+    if (draftIdFromUrl) {
+      const draft = drafts.find((item) => item.id === draftIdFromUrl);
+      if (draft) {
+        openDraft(draft);
+      } else {
+        showToast(`Unknown draft: ${draftIdFromUrl}`, true);
+      }
+    } else if (slugFromUrl) {
       if (docs.some((doc) => doc.slug === slugFromUrl)) {
         await selectSlug(slugFromUrl, { updateUrl: false });
       } else {
