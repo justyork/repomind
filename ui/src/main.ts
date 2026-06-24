@@ -13,8 +13,12 @@ import {
 } from './api.js';
 import { catalogLabel } from './catalog.js';
 import { renderDashboard } from './dashboard.js';
-import { renderDocPanel } from './doc-panel.js';
 import { renderDraftEditor } from './editor.js';
+import {
+  destroyPageWorkspace,
+  openPageWorkspaceDraft,
+  renderPageWorkspace,
+} from './page-workspace.js';
 import { bindThemeToggle, initTheme } from './theme.js';
 import { bindKeyboardNav, collectTreeSlugs } from './keyboard-nav.js';
 import { renderTreeSidebar } from './tree-sidebar.js';
@@ -104,7 +108,8 @@ async function main(): Promise<void> {
     }
 
     dashboardRefresh = null;
-    renderDocPanel(workspaceEl, null);
+    destroyPageWorkspace();
+    renderPageWorkspace(workspaceEl, null, workspaceOptions());
   }
 
   healthToggle.addEventListener('click', () => {
@@ -155,6 +160,26 @@ async function main(): Promise<void> {
   }
 
   const knownSlugs = (): string[] => docs.map((d) => d.slug);
+
+  function workspaceOptions() {
+    return {
+      docIndex: docs,
+      onPublished: async (path: string) => {
+        const docsRes = await listDocs();
+        docs = docsRes.docs;
+        await reloadTree(sidebarEl);
+        await refreshStats();
+        void dashboardRefresh?.();
+        showToast(`Published: ${path}`);
+      },
+      onError: (message: string) => showToast(message, true),
+      onReloadDoc: (slug: string) => getDoc(slug),
+      onDraftsChanged: () => {
+        void reloadDrafts(sidebarEl);
+      },
+      onCopyLink: () => showToast('Link copied'),
+    };
+  }
 
   function renderSearchDropdown(results: SearchResult[]): void {
     if (results.length === 0) {
@@ -210,8 +235,31 @@ async function main(): Promise<void> {
   function openDraft(draft: Draft): void {
     setViewMode('workspace');
     sidebarEl.setActiveDraft?.(draft.id);
-    renderDraftEditor(workspaceEl, draft, {
-      onPublished: (path) => {
+
+    const baseSlug = draft.forked_from ?? (docs.some((d) => d.slug === draft.slug) ? draft.slug : null);
+    if (baseSlug) {
+      void getDoc(baseSlug).then((doc) => {
+        openPageWorkspaceDraft(workspaceEl, doc, draft, {
+          ...workspaceOptions(),
+          docRelativePath: relativePathForSlug(docs, baseSlug),
+          slugByRelative: buildSlugByRelative(docs),
+          onPublished: async (path) => {
+            await workspaceOptions().onPublished(path);
+            await selectSlug(draft.slug);
+          },
+        });
+      }).catch(() => {
+        renderDraftEditor(workspaceEl, draft, draftEditorCallbacks(), docs);
+      });
+      return;
+    }
+
+    renderDraftEditor(workspaceEl, draft, draftEditorCallbacks(), docs);
+  }
+
+  function draftEditorCallbacks() {
+    return {
+      onPublished: (path: string) => {
         void (async () => {
           const docsRes = await listDocs();
           docs = docsRes.docs;
@@ -219,29 +267,38 @@ async function main(): Promise<void> {
           await refreshStats();
           void dashboardRefresh?.();
           showToast(`Published: ${path}`);
-          await selectSlug(draft.slug);
+          const match = docs.find((d) => d.slug === draft.slug);
+          if (match) {
+            await selectSlug(match.slug);
+          }
         })();
       },
       onClosed: () => {
-        void selectSlug(draft.forked_from ?? draft.slug).catch(() => {
-          renderDocPanel(workspaceEl, null);
-        });
+        renderPageWorkspace(workspaceEl, null, workspaceOptions());
       },
       onDeleted: () => {
         void (async () => {
           await reloadTree(sidebarEl);
-          renderDocPanel(workspaceEl, null);
+          renderPageWorkspace(workspaceEl, null, workspaceOptions());
         })();
       },
-      onError: (message) => showToast(message, true),
-    }, docs);
+      onError: (message: string) => showToast(message, true),
+    };
   }
 
   async function startEdit(slug: string): Promise<void> {
+    if (viewMode !== 'workspace') {
+      return;
+    }
     try {
+      const doc = await getDoc(slug);
       const { draft } = await openDraftForSlug(slug);
       await reloadDrafts(sidebarEl);
-      openDraft(draft);
+      openPageWorkspaceDraft(workspaceEl, doc, draft, {
+        ...workspaceOptions(),
+        docRelativePath: relativePathForSlug(docs, slug),
+        slugByRelative: buildSlugByRelative(docs),
+      });
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Edit failed', true);
     }
@@ -264,13 +321,10 @@ async function main(): Promise<void> {
     try {
       const doc = await getDoc(slug);
       const docRelativePath = relativePathForSlug(docs, slug);
-      renderDocPanel(workspaceEl, doc, {
-        onEdit: (editSlug) => {
-          void startEdit(editSlug);
-        },
+      renderPageWorkspace(workspaceEl, doc, {
+        ...workspaceOptions(),
         docRelativePath,
         slugByRelative: buildSlugByRelative(docs),
-        onCopyLink: () => showToast('Link copied'),
       });
       if (updateUrl) {
         writeSlugToUrl(slug, urlMode);
@@ -314,7 +368,7 @@ async function main(): Promise<void> {
           docs = docsResInner.docs;
           if (currentSlug && deletedSlugs.includes(currentSlug)) {
             currentSlug = null;
-            renderDocPanel(workspaceEl, null);
+            renderPageWorkspace(workspaceEl, null, workspaceOptions());
           }
           await reloadTree(sidebarEl);
           await refreshStats();
@@ -333,7 +387,7 @@ async function main(): Promise<void> {
           await refreshStats();
           if (currentSlug && !docs.some((doc) => doc.slug === currentSlug)) {
             currentSlug = null;
-            renderDocPanel(workspaceEl, null);
+            renderPageWorkspace(workspaceEl, null, workspaceOptions());
           }
         } catch {
           // ignore transient reload errors
@@ -344,7 +398,7 @@ async function main(): Promise<void> {
     subscribePopState((slug) => {
       if (!slug) {
         currentSlug = null;
-        renderDocPanel(workspaceEl, null);
+        renderPageWorkspace(workspaceEl, null, workspaceOptions());
         return;
       }
       if (docs.some((doc) => doc.slug === slug)) {
@@ -352,7 +406,7 @@ async function main(): Promise<void> {
       }
     });
 
-    renderDocPanel(workspaceEl, null);
+    renderPageWorkspace(workspaceEl, null, workspaceOptions());
 
     const slugFromUrl = readSlugFromUrl();
     const draftIdFromUrl = readDraftIdFromUrl();
