@@ -1,5 +1,10 @@
+import { Extension } from '@tiptap/core';
 import type { Editor } from '@tiptap/core';
+import { Plugin, PluginKey } from '@tiptap/pm/state';
+import { Decoration, DecorationSet } from '@tiptap/pm/view';
 import { enhanceMermaidPreview } from './mermaid-preview.js';
+
+const mermaidPreviewKey = new PluginKey('mermaidEditorPreview');
 
 function escapeHtml(text: string): string {
   return text
@@ -8,70 +13,66 @@ function escapeHtml(text: string): string {
     .replace(/>/g, '&gt;');
 }
 
-/** Live mermaid preview below mermaid code blocks in the TipTap editor. */
-export function bindMermaidEditorPreviews(editor: Editor, mountEl: HTMLElement): () => void {
-  let timer: ReturnType<typeof setTimeout> | null = null;
+function buildMermaidWidget(source: string): HTMLElement {
+  const widget = document.createElement('div');
+  widget.className = 'mermaid-editor-preview mermaid-wrapper';
+  widget.contentEditable = 'false';
 
-  function refresh(): void {
-    const codeBlocks = mountEl.querySelectorAll<HTMLElement>('pre code');
-    for (const code of codeBlocks) {
-      const language = code.className.match(/language-(\S+)/)?.[1];
-      const pre = code.parentElement;
-      if (!pre || language !== 'mermaid') {
-        continue;
-      }
-
-      const wrapper = pre.closest('.mermaid-editor-block') ?? (() => {
-        const block = document.createElement('div');
-        block.className = 'mermaid-editor-block';
-        pre.parentElement?.insertBefore(block, pre);
-        block.appendChild(pre);
-        return block;
-      })();
-
-      let preview = wrapper.querySelector<HTMLElement>('.mermaid-editor-preview');
-      if (!preview) {
-        preview = document.createElement('div');
-        preview.className = 'mermaid-editor-preview mermaid-wrapper';
-        wrapper.appendChild(preview);
-      }
-
-      const source = code.textContent?.trim() ?? '';
-      if (!source) {
-        preview.innerHTML = '<p class="mermaid-placeholder">Mermaid preview</p>';
-        continue;
-      }
-
-      preview.innerHTML = `<pre class="mermaid">${escapeHtml(source)}</pre>`;
-      void enhanceMermaidPreview(preview);
-    }
+  const trimmed = source.trim();
+  if (!trimmed) {
+    widget.innerHTML = '<p class="mermaid-placeholder">Mermaid preview</p>';
+    return widget;
   }
 
-  function scheduleRefresh(): void {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    timer = setTimeout(() => {
-      timer = null;
-      refresh();
-    }, 350);
-  }
+  widget.innerHTML = `<pre class="mermaid">${escapeHtml(trimmed)}</pre>`;
+  void enhanceMermaidPreview(widget);
+  return widget;
+}
 
-  editor.on('update', scheduleRefresh);
-  editor.on('create', scheduleRefresh);
-  scheduleRefresh();
+/** Live mermaid preview via ProseMirror widget decorations (no DOM surgery inside the doc). */
+export const MermaidPreviewExtension = Extension.create({
+  name: 'mermaidPreview',
 
+  addProseMirrorPlugins() {
+    return [
+      new Plugin({
+        key: mermaidPreviewKey,
+        props: {
+          decorations(state) {
+            const decorations: Decoration[] = [];
+
+            state.doc.descendants((node, pos) => {
+              if (node.type.name !== 'codeBlock') {
+                return;
+              }
+              if (node.attrs.language !== 'mermaid') {
+                return;
+              }
+
+              const widget = buildMermaidWidget(node.textContent);
+              decorations.push(
+                Decoration.widget(pos + node.nodeSize, widget, {
+                  side: 1,
+                  key: `mermaid-${pos}-${node.textContent.length}`,
+                }),
+              );
+            });
+
+            return DecorationSet.create(state.doc, decorations);
+          },
+        },
+      }),
+    ];
+  },
+});
+
+/** Re-render mermaid widgets after theme toggle (decorations do not auto-refresh). */
+export function bindMermaidThemeRefresh(editor: Editor): () => void {
   const onThemeChange = (): void => {
-    scheduleRefresh();
+    editor.view.dispatch(editor.state.tr);
   };
   window.addEventListener('repomind-theme-change', onThemeChange);
-
   return () => {
-    if (timer) {
-      clearTimeout(timer);
-    }
-    editor.off('update', scheduleRefresh);
-    editor.off('create', scheduleRefresh);
     window.removeEventListener('repomind-theme-change', onThemeChange);
   };
 }
