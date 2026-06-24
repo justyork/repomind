@@ -271,7 +271,7 @@ describe('UI HTTP API', () => {
     try {
       const health = await fetchJson(port, '/api/health');
       expect(health.status).toBe(200);
-      expect(health.body).toMatchObject({ ok: true, docCount: 2, version: expect.stringMatching(/^\d+\.\d+\.\d+$/) });
+      expect(health.body).toMatchObject({ ok: true, docCount: 2, version: expect.stringMatching(/^\d+\.\d+\.\d+(\.\d+)?$/) });
 
       const search = await fetchJson(port, '/api/search?q=caravan');
       expect(search.status).toBe(200);

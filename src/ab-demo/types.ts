@@ -68,3 +68,61 @@ export interface AbRunResult {
   arms: AbArmsRunResult;
   pass: boolean | null;
 }
+
+export interface HumanScoreEntry {
+  questionId: string;
+  baseline: number;
+  repomind: number;
+  reviewer?: string;
+  notes?: string;
+}
+
+export interface LiveArmAnswer {
+  arm: 'baseline' | 'repomind';
+  questionId: string;
+  answer: string;
+  retrievedSlugs: string[];
+  tokens: number;
+  filesRead: number;
+  strategy: string;
+  searchHits: number;
+  docsFetched: number;
+  transcriptSource?: 'transcript' | 'simulated';
+}
+
+export interface LiveQuestionResult {
+  questionId: string;
+  prompt: string;
+  anchorSlugs: string[];
+  tags?: string[];
+  baseline: LiveArmAnswer;
+  repomind: LiveArmAnswer;
+  tokenWinner: 'baseline' | 'repomind' | 'tie';
+  blindLabels?: { baseline: 'A' | 'B'; repomind: 'A' | 'B' };
+}
+
+export interface LiveEvalResult {
+  runAt: string;
+  evalKind: 'live';
+  corpusCwd: string;
+  questionsFile: string;
+  questionsVersion: number;
+  comparisons: AbQuestionComparison[];
+  live: LiveQuestionResult[];
+  baseline: AbArmSummary;
+  repomind: AbArmSummary;
+  repomindTokenWins: number;
+  passThreshold: number;
+  tokenPass: boolean;
+  humanScores: HumanScoreEntry[] | null;
+  hallucinationPass: boolean | null;
+  categoryWins?: Array<{
+    category: string;
+    repomindWins: boolean;
+    baselineHallucinationTotal: number;
+    repomindHallucinationTotal: number;
+  }>;
+  pass: boolean | null;
+  blindPackPath?: string;
+  note: string;
+}

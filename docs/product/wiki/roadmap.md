@@ -33,7 +33,8 @@ Goal: prove agents query structured `docs/` better than raw markdown, then publi
 | ID | Deliverable | Status |
 |----|-------------|--------|
 | B2 | A/B harness (`ab-demo/`, token simulation) | **Done** — `npm run ab-demo:run`; token pass on seeded corpus |
-| B2b | Hallucination scoring (human, blind rubric) | **Pending** — see `ab-demo/score-hallucination.md` |
+| B2c | Live eval harness (`repo-mind ab-eval`) | **Done** (0.6.1) — skyforge corpus, blind pack export, `--record-scores` |
+| B2b | Hallucination scoring (human, blind rubric) | **Pending** — run `ab-eval` then `ab-demo/score-hallucination.md` |
 | B1 | Dogfood exit checklist on [skyforge-caravan](~/www/GAMEDEV/skyforge-caravan) | **In progress** — [checklist](../../technical/specs/dogfood-skyforge-checklist.md); log friction in [improvements](improvements.md) |
 | B4 | This roadmap page | **Done** |
 | B3 | npm **0.2.0** + README version sync | **Done** |
@@ -48,6 +49,7 @@ Automated token slice (2026-06-23): baseline median **792** vs repomind **71** o
 ```bash
 npm run ab-demo          # validate fixture
 npm run ab-demo:run      # token comparison → ab-demo/results/latest.json
+repo-mind ab-eval --cwd ~/www/GAMEDEV/skyforge-caravan   # live eval on real docs/
 ```
 
 ## v4.1 — UX depth (after v4.0 prove)
