@@ -12,7 +12,7 @@ import {
   type TreeNode,
   type TreePageNode,
 } from './api.js';
-import { catalogIconLetter } from './catalog.js';
+import { renderTreeFolderNodeIcon, renderTreePageIcon } from './tree-icons.js';
 
 export interface TreeSidebarCallbacks {
   onSelectSlug: (slug: string) => void;
@@ -39,24 +39,6 @@ function loadExpanded(): Set<string> {
 
 function saveExpanded(expanded: Set<string>): void {
   localStorage.setItem(EXPANDED_KEY, JSON.stringify([...expanded]));
-}
-
-function folderIcon(node: TreeFolderNode): string {
-  if (node.emoji) {
-    return node.emoji;
-  }
-  return '📁';
-}
-
-function pageIcon(type: string, contentKind?: string): string {
-  if (contentKind === 'json') {
-    return '{ }';
-  }
-  if (contentKind === 'yaml') {
-    return 'Y';
-  }
-  const letter = catalogIconLetter(type);
-  return letter.length === 1 ? letter : '📄';
 }
 
 function closeTreeMenus(): void {
@@ -381,7 +363,7 @@ export function renderTreeSidebar(
     row.innerHTML = `
       <span class="tree-spacer" aria-hidden="true"></span>
       <button type="button" class="tree-label">
-        <span class="tree-icon tree-icon--page">${pageIcon(node.type, node.contentKind)}</span>
+        ${renderTreePageIcon(node.type, node.contentKind)}
         <span class="tree-title">${escapeHtml(node.title)}</span>
       </button>
       <button type="button" class="tree-menu" title="Actions">⋯</button>
@@ -421,7 +403,7 @@ export function renderTreeSidebar(
     row.innerHTML = `
       <button type="button" class="tree-toggle" aria-expanded="${isOpen}">${isOpen ? '▾' : '▸'}</button>
       <button type="button" class="tree-label">
-        <span class="tree-icon tree-icon--folder">${folderIcon(node)}</span>
+        ${renderTreeFolderNodeIcon(node)}
         <span class="tree-title">${escapeHtml(node.name)}</span>
       </button>
       <button type="button" class="tree-menu" title="Actions">⋯</button>
@@ -557,6 +539,8 @@ export function renderTreeSidebar(
     tree.children = nextTree.children ?? [];
     tree.emoji = nextTree.emoji;
     tree.indexPageSlug = nextTree.indexPageSlug;
+    tree.indexPageType = nextTree.indexPageType;
+    tree.indexPageContentKind = nextTree.indexPageContentKind;
     tree.name = nextTree.name;
     drafts.length = 0;
     drafts.push(...(nextDrafts ?? []));

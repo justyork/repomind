@@ -114,6 +114,8 @@ export interface TreeFolderNode {
   relativePath: string;
   emoji: string | null;
   indexPageSlug: string | null;
+  indexPageType: string | null;
+  indexPageContentKind: 'markdown' | 'yaml' | 'json' | null;
   children: TreeNode[];
 }
 

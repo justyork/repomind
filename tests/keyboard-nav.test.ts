@@ -9,6 +9,8 @@ function sampleTree(): TreeFolderNode {
     relativePath: '',
     emoji: null,
     indexPageSlug: 'readme',
+    indexPageType: 'wiki-page',
+    indexPageContentKind: 'markdown',
     children: [
       {
         kind: 'page',
@@ -26,6 +28,8 @@ function sampleTree(): TreeFolderNode {
         relativePath: 'specs',
         emoji: null,
         indexPageSlug: 'specs-readme',
+        indexPageType: 'wiki-page',
+        indexPageContentKind: 'markdown',
         children: [
           {
             kind: 'page',
