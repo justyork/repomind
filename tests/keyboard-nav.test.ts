@@ -14,6 +14,16 @@ function sampleTree(): TreeFolderNode {
     children: [
       {
         kind: 'page',
+        name: 'README',
+        relativePath: 'README.md',
+        slug: 'readme',
+        title: 'Readme',
+        status: 'accepted',
+        type: 'wiki-page',
+        contentKind: 'markdown',
+      },
+      {
+        kind: 'page',
         name: 'caravan',
         relativePath: 'glossary/caravan.md',
         slug: 'caravan',
@@ -33,6 +43,16 @@ function sampleTree(): TreeFolderNode {
         children: [
           {
             kind: 'page',
+            name: 'README',
+            relativePath: 'specs/README.md',
+            slug: 'specs-readme',
+            title: 'Specs Readme',
+            status: 'accepted',
+            type: 'wiki-page',
+            contentKind: 'markdown',
+          },
+          {
+            kind: 'page',
             name: 'convoy-rules',
             relativePath: 'specs/convoy-rules.md',
             slug: 'convoy-rules',
@@ -48,7 +68,7 @@ function sampleTree(): TreeFolderNode {
 }
 
 describe('collectTreeSlugs', () => {
-  it('returns depth-first slug order with folder READMEs first', () => {
+  it('returns depth-first slug order', () => {
     expect(collectTreeSlugs(sampleTree())).toEqual([
       'readme',
       'caravan',

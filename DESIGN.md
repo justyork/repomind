@@ -12,9 +12,9 @@ Light, structured, trustworthy. Hierarchy through **catalogs and pages**, not fi
 
 ```css
 --rm-bg: #FFFFFF;
---rm-bg-subtle: #F4F5F7;
+--rm-bg-subtle: #F7F8FA;
 --rm-bg-sidebar: #FFFFFF;
---rm-border: #DFE1E6;
+--rm-border: #E4E6EA;
 --rm-border-strong: #C1C7D0;
 --rm-text: #172B4D;
 --rm-text-muted: #626F86;
@@ -25,7 +25,7 @@ Light, structured, trustworthy. Hierarchy through **catalogs and pages**, not fi
 --rm-success: #216E4E;
 --rm-warning: #974F0C;
 --rm-danger: #AE2E24;
---rm-radius: 4px;
+--rm-radius: 6px;
 --rm-space-1: 4px;
 --rm-space-2: 8px;
 --rm-space-3: 12px;
@@ -72,10 +72,27 @@ Light, structured, trustworthy. Hierarchy through **catalogs and pages**, not fi
 
 ## Components
 
-- **Tree row:** chevron + label + count; indent pages 16px per level (flat under catalog for v1).
-- **Page row:** title (truncate), status chip when not `accepted`.
+- **Tree row:** chevron + outline icon + label; 6px row radius; hover uses accent-subtle fill.
+- **Page row:** outline file icon (accent stroke) + title (truncate), status chip when not `accepted`.
 - **Breadcrumb:** muted parents, current page bold; parents clickable.
 - **Search dropdown:** grouped by catalog; keyboard-friendly list.
+
+## Icons (v0.7+ refresh)
+
+**Style:** outline stroke SVG (Lucide-inspired), not filled shapes or emoji for default tree nodes.
+
+| Token | Value |
+|-------|-------|
+| Stroke width | `1.25px` (`--icon-stroke`) |
+| Folder color | `--icon-fg` (#626F86 light) |
+| Page color | `--accent` (#0C66E4 light) |
+| Size | 16×16 in 18×18 hit box |
+
+- **Folder:** open-folder outline; custom `emoji` in frontmatter still overrides.
+- **Page:** file-with-fold outline; JSON/YAML get extra stroke hints inside the file.
+- **Catalog sidebar:** letter badges remain for type grouping; folder catalog rows use muted icon color without filled pill.
+
+Implementation: `ui/src/tree-icons.ts`, styles in `ui/src/styles.css` (`.tree-outline-icon`).
 
 ## Safe choices (category baseline)
 

@@ -1,13 +1,10 @@
 import type { TreeFolderNode } from './api.js';
 
-/** Depth-first slug order matching the sidebar tree (folder READMEs before children). */
+/** Depth-first slug order matching the sidebar tree. */
 export function collectTreeSlugs(tree: TreeFolderNode): string[] {
   const slugs: string[] = [];
 
   function walkFolder(folder: TreeFolderNode): void {
-    if (folder.indexPageSlug) {
-      slugs.push(folder.indexPageSlug);
-    }
     for (const child of folder.children) {
       if (child.kind === 'page') {
         slugs.push(child.slug);

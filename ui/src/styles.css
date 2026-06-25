@@ -10,6 +10,8 @@
   --accent-subtle: #e9f2ff;
   --link: #0c66e4;
   --link-hover: #0055cc;
+  --link-underline: rgba(12, 102, 228, 0.4);
+  --wikilink-underline: rgba(12, 102, 228, 0.55);
   --table-stripe: #fafbfc;
   --table-header: #f4f5f7;
   --shadow: rgba(9, 30, 66, 0.15);
@@ -28,6 +30,8 @@
   --accent-subtle: rgba(91, 159, 212, 0.18);
   --link: #7eb8ff;
   --link-hover: #a8d4ff;
+  --link-underline: rgba(126, 192, 255, 0.72);
+  --wikilink-underline: rgba(126, 192, 255, 0.85);
   --table-stripe: rgba(255, 255, 255, 0.03);
   --table-header: #1a2332;
   --shadow: rgba(0, 0, 0, 0.45);
@@ -143,9 +147,28 @@ body {
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: var(--sidebar-width, 280px) 4px 1fr;
   flex: 1;
   min-height: 0;
+}
+
+.sidebar-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
+}
+
+.sidebar-resize-handle:hover,
+.sidebar-resize-handle.is-dragging {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.sidebar-resize-handle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .sidebar {
@@ -494,7 +517,7 @@ body {
 .visual-canvas .ProseMirror a {
   color: var(--link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 50%, transparent);
+  text-decoration-color: var(--link-underline);
   text-underline-offset: 2px;
 }
 
@@ -1601,6 +1624,17 @@ select {
   background: var(--accent-subtle);
 }
 
+.tree-row.tree-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--accent-subtle);
+}
+
+.tree-row.tree-drop-invalid {
+  outline: 2px dashed var(--danger, #c62828);
+  outline-offset: -2px;
+}
+
 .tree-toggle,
 .tree-spacer {
   width: 18px;
@@ -2025,8 +2059,9 @@ select {
 .markdown-preview a {
   color: var(--link);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, var(--link) 45%, transparent);
+  text-decoration-color: var(--link-underline);
   text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
 }
 
 .markdown-preview a:hover {
@@ -2037,7 +2072,8 @@ select {
 .markdown-preview a.wikilink {
   color: var(--link);
   text-decoration: none;
-  border-bottom: 1px dashed color-mix(in srgb, var(--link) 65%, transparent);
+  border-bottom: 1px solid var(--wikilink-underline);
+  padding-bottom: 0.05em;
 }
 
 .markdown-preview a.wikilink:hover {
@@ -2325,6 +2361,71 @@ select {
   max-width: 640px;
 }
 
+.tree-page-modal .modal-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.tree-page-modal .modal-label {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.tree-page-modal .modal-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  font-size: 0.9rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.tree-template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+}
+
+.tree-template-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 6px);
+  background: var(--bg);
+  color: var(--text);
+  text-align: left;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.tree-template-item:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: var(--accent-subtle);
+}
+
+.tree-template-item.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.tree-page-modal .modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .modal-title {
   margin: 0 0 0.75rem;
   font-size: 1.1rem;
@@ -2514,6 +2615,10 @@ select {
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
+  }
+
+  .sidebar-resize-handle {
+    display: none;
   }
 
   .sidebar {
