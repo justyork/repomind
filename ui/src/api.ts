@@ -106,6 +106,8 @@ export interface TreePageNode {
   status: string;
   type: string;
   contentKind: 'markdown' | 'yaml' | 'json';
+  childFolderPath?: string;
+  children?: TreeNode[];
 }
 
 export interface TreeFolderNode {
@@ -174,6 +176,14 @@ export function createFsPage(
   });
 }
 
+export function promoteFsPage(pagePath: string): Promise<{ result: FsPageMutationResult & { folderPath: string } }> {
+  return fetchJson('/api/fs/promote-page', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pagePath }),
+  });
+}
+
 export interface FsPageMutationResult {
   relativePath: string;
   slug: string;
@@ -191,6 +201,24 @@ export function moveFsPage(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ fromPath, toDir }),
+  });
+}
+
+export interface FsMoveFolderResult {
+  relativePath: string;
+  previousPath: string;
+  siblingPagePath?: string;
+  cascadeUpdated: string[];
+}
+
+export function moveFsFolder(
+  fromPath: string,
+  toParentDir: string,
+): Promise<{ result: FsMoveFolderResult }> {
+  return fetchJson('/api/fs/move-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fromPath, toParentDir }),
   });
 }
 

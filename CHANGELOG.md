@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1.0] - 2026-06-24
+
+### Added
+
+- **Tree drag-and-drop** — reorder pages and folders in the sidebar; folder moves keep Confluence-style sibling `.md` files in sync
+- **Resizable sidebar** — drag handle with persisted width (220–420px)
+- **Confluence page+folder rows** — same-named `page.md` + `page/` merge into one expandable tree row; create-on-page adds children inside the sibling folder
+- **Template modals** — blank page and template picker replace inline prompts in the tree ⋯ menu
+
+### Changed
+
+- **Dark theme links** — brighter link tokens and solid underlines in reader, editor, and wikilink chips
+- **Mermaid preview** — explicit refresh on theme toggle via plugin state (no DOM re-wrap loop)
+- **`.gstack/` gitignore** — local gstack state no longer tracked in the repo
+
 ## [0.7.0] - 2026-06-24
 
 ### Added

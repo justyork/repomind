@@ -8,6 +8,7 @@ export interface EditorPropertiesState {
   status: string;
   tags: string[];
   related: string[];
+  forkedFrom?: string;
 }
 
 const DOC_TYPES = [
@@ -52,6 +53,7 @@ export function renderEditorPropertiesRail(options: {
     <div class="props-section">
       <div class="props-label">Slug</div>
       <input id="ed-slug" class="props-slug-input" spellcheck="false" />
+      <div class="props-hint props-hint-slug hidden" id="ed-slug-hint"></div>
     </div>
     <div class="props-section">
       <div class="props-label">Tags</div>
@@ -79,6 +81,7 @@ export function bindEditorProperties(
   onChange: () => void,
 ): EditorPropertiesHandle {
   const slugEl = container.querySelector<HTMLInputElement>('#ed-slug')!;
+  const slugHint = container.querySelector<HTMLElement>('#ed-slug-hint')!;
   const statusChip = container.querySelector<HTMLButtonElement>('#ed-status-chip')!;
   const statusMenu = container.querySelector<HTMLDivElement>('#ed-status-menu')!;
   const typeChip = container.querySelector<HTMLButtonElement>('#ed-type-chip')!;
@@ -96,6 +99,12 @@ export function bindEditorProperties(
   let type = initial.type;
 
   slugEl.value = initial.slug;
+  if (initial.forkedFrom) {
+    slugEl.readOnly = true;
+    slugEl.title = 'Slug is fixed for edits of an existing published page';
+    slugHint.textContent = `Locked while editing published page (${initial.forkedFrom})`;
+    slugHint.classList.remove('hidden');
+  }
   updateStatusChip();
   updateTypeChip();
   renderTagChips();

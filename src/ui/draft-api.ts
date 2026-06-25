@@ -4,7 +4,7 @@ import { runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
-import { createFolder, createPageFile, deleteFolder, deletePageFile, movePageFile, renamePageFile } from './fs-operations.js';
+import { createFolder, createPageFile, deleteFolder, deletePageFile, moveFolder, movePageFile, promotePageToFolder, renamePageFile } from './fs-operations.js';
 import { listPageTemplates } from './templates.js';
 import { prepareDocFile, prepareAllDocs } from '../prepare/prepare-docs.js';
 import { syncAllDocLinks } from '../prepare/auto-links.js';
@@ -122,9 +122,25 @@ export function handleDraftApi(
         body: doc.body ?? '',
         tags,
         related,
+        forked_from: page.slug,
         target_path: page.relativePath,
       });
       return { status: 201, body: { page, draft } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/promote-page' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const pagePath = typeof body.pagePath === 'string' ? body.pagePath : '';
+    try {
+      const result = promotePageToFolder(index, pagePath);
+      return { status: 200, body: { result } };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       return jsonError(400, message);
@@ -140,6 +156,22 @@ export function handleDraftApi(
     const toDir = typeof body.toDir === 'string' ? body.toDir : '';
     try {
       const result = movePageFile(index, fromPath, toDir);
+      return { status: 200, body: { result } };
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return jsonError(400, message);
+    }
+  }
+
+  if (pathname === '/api/fs/move-folder' && method === 'POST') {
+    const body = parseJsonBody(bodyRaw);
+    if (body === null) {
+      return jsonError(400, 'invalid JSON body');
+    }
+    const fromPath = typeof body.fromPath === 'string' ? body.fromPath : '';
+    const toParentDir = typeof body.toParentDir === 'string' ? body.toParentDir : '';
+    try {
+      const result = moveFolder(index, fromPath, toParentDir);
       return { status: 200, body: { result } };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);

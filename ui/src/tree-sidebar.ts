@@ -3,9 +3,6 @@ import {
   createFsPage,
   deleteFsNode,
   listTemplates,
-  moveFsPage,
-  renameFsPage,
-  setCatalogEmoji,
   type Draft,
   type PageTemplate,
   type TreeFolderNode,
@@ -13,6 +10,9 @@ import {
   type TreePageNode,
 } from './api.js';
 import { renderTreeFolderNodeIcon, renderTreePageIcon } from './tree-icons.js';
+import { openBlankPageModal, openTemplatePageModal } from './tree-template-modal.js';
+import { resolveCreateParentForPage } from './tree-page-parent.js';
+import { applyTreeRowDragSource, applyTreeRowDropTarget, applyTreeChildrenDropTarget, bindTreeDnD } from './tree-dnd.js';
 
 export interface TreeSidebarCallbacks {
   onSelectSlug: (slug: string) => void;
@@ -45,21 +45,6 @@ function closeTreeMenus(): void {
   document.querySelectorAll('.tree-context-menu').forEach((menu) => menu.remove());
 }
 
-function collectFolderPaths(node: TreeFolderNode): string[] {
-  const paths: string[] = [node.relativePath];
-  for (const child of node.children ?? []) {
-    if (child.kind === 'folder') {
-      paths.push(...collectFolderPaths(child));
-    }
-  }
-  return paths;
-}
-
-function promptPageName(): string | null {
-  const name = window.prompt('Page name (without .md):');
-  return name?.trim() ? name.trim() : null;
-}
-
 function createPage(
   parentPath: string,
   name: string,
@@ -83,67 +68,30 @@ function showContextMenu(
     parentPath: string;
     folderPath: string;
     page?: TreePageNode;
-    tree: TreeFolderNode;
     templates: PageTemplate[];
+    resolveCreateParent: () => Promise<string | null>;
   },
   callbacks: TreeSidebarCallbacks,
 ): void {
   closeTreeMenus();
 
-  const { kind, parentPath, folderPath, page, tree, templates } = options;
-  const moveTargets =
-    kind === 'page' && page
-      ? collectFolderPaths(tree).filter((path) => {
-          const pageParent = page.relativePath.includes('/')
-            ? page.relativePath.slice(0, page.relativePath.lastIndexOf('/'))
-            : '';
-          return path !== pageParent;
-        })
-      : [];
+  const { kind, folderPath, page, templates, resolveCreateParent } = options;
+
+  const showDelete = kind === 'page' || (kind === 'folder' && Boolean(folderPath));
+  const hasTemplates = templates.length > 0;
 
   const menu = document.createElement('div');
   menu.className = 'tree-create-menu tree-context-menu';
   menu.innerHTML = `
-    <div class="tree-menu-label">Create</div>
-    <button type="button" data-action="page">New page</button>
-    ${templates
-      .map(
-        (template) =>
-          `<button type="button" data-action="template" data-template="${escapeAttr(template.id)}">From template: ${escapeHtml(template.label)}</button>`,
-      )
-      .join('')}
-    <button type="button" data-action="folder">New folder</button>
-    ${
-      kind === 'folder' && folderPath
-        ? '<button type="button" data-action="emoji">Set emoji</button>'
-        : ''
-    }
-    ${
-      kind === 'page' && page
-        ? `
-      <div class="tree-menu-label">Page</div>
-      <button type="button" data-action="rename">Rename…</button>
-      ${moveTargets.length > 0 ? '<div class="tree-menu-label">Move to</div>' : ''}
-      ${moveTargets
-        .map(
-          (folder) =>
-            `<button type="button" data-action="move" data-folder="${escapeAttr(folder)}">${escapeHtml(folder || '(root)')}</button>`,
-        )
-        .join('')}
-      <button type="button" data-action="delete-page" class="tree-menu-danger">Delete page</button>
-    `
-        : ''
-    }
-    ${
-      kind === 'folder' && folderPath
-        ? '<button type="button" data-action="delete-folder" class="tree-menu-danger">Delete folder</button>'
-        : ''
-    }
+    <button type="button" data-action="folder">Добавить директорию</button>
+    <button type="button" data-action="page">Создать файл</button>
+    ${hasTemplates ? '<button type="button" data-action="template">Создать из шаблона</button>' : ''}
+    ${showDelete ? '<button type="button" data-action="delete" class="tree-menu-danger">Удалить</button>' : ''}
   `;
 
   const rect = anchor.getBoundingClientRect();
   menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.left = `${Math.max(8, rect.left - 160)}px`;
+  menu.style.left = `${Math.max(8, rect.right - 200)}px`;
   document.body.appendChild(menu);
 
   const close = () => menu.remove();
@@ -157,158 +105,96 @@ function showContextMenu(
 
   menu.querySelector('[data-action="page"]')?.addEventListener('click', () => {
     close();
-    const name = promptPageName();
-    if (!name) {
-      return;
-    }
-    createPage(parentPath, name, undefined, callbacks);
-  });
-
-  menu.querySelectorAll<HTMLButtonElement>('[data-action="template"]').forEach((button) => {
-    button.addEventListener('click', () => {
-      close();
-      const name = promptPageName();
-      if (!name) {
+    void (async () => {
+      const targetParent = await resolveCreateParent();
+      if (targetParent === null) {
         return;
       }
-      createPage(parentPath, name, button.dataset.template, callbacks);
-    });
+      openBlankPageModal((name) => {
+        createPage(targetParent, name, undefined, callbacks);
+      });
+    })();
+  });
+
+  menu.querySelector('[data-action="template"]')?.addEventListener('click', () => {
+    close();
+    void (async () => {
+      const targetParent = await resolveCreateParent();
+      if (targetParent === null) {
+        return;
+      }
+      openTemplatePageModal(templates, (name, templateId) => {
+        createPage(targetParent, name, templateId, callbacks);
+      });
+    })();
   });
 
   menu.querySelector('[data-action="folder"]')?.addEventListener('click', () => {
     close();
-    const name = window.prompt('Folder name:');
+    const name = window.prompt('Имя директории:');
     if (!name?.trim()) {
       return;
     }
-    void createFsFolder(parentPath, name.trim())
-      .then(() => callbacks.onTreeChanged?.())
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Create folder failed');
-      });
-  });
-
-  menu.querySelector('[data-action="emoji"]')?.addEventListener('click', () => {
-    close();
-    const emoji = window.prompt('Emoji for this folder:');
-    if (emoji === null) {
-      return;
-    }
-    void setCatalogEmoji(folderPath, emoji)
-      .then(() => callbacks.onTreeChanged?.())
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Set emoji failed');
-      });
-  });
-
-  menu.querySelector('[data-action="rename"]')?.addEventListener('click', () => {
-    close();
-    if (!page) {
-      return;
-    }
-    const currentName = page.relativePath.split('/').pop()?.replace(/\.md$/, '') ?? page.name;
-    const newName = window.prompt('New page name (without .md):', currentName);
-    if (!newName?.trim() || newName.trim() === currentName) {
-      return;
-    }
-    void renameFsPage(page.relativePath, newName.trim())
-      .then(({ result }) => {
-        callbacks.onTreeChanged?.();
-        if (result.cascadeUpdated.length > 0) {
-          callbacks.onNotify?.(
-            `Renamed to ${result.slug}; updated links in ${result.cascadeUpdated.length} file(s).`,
-          );
-        } else if (result.slugChanged && result.inboundWarnings.length > 0) {
-          callbacks.onError?.(
-            `Renamed to ${result.slug}; ${result.inboundWarnings.length} page(s) may still reference the old slug.`,
-          );
-        }
-        callbacks.onSelectSlug(result.slug);
-      })
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Rename failed');
-      });
-  });
-
-  menu.querySelectorAll<HTMLButtonElement>('[data-action="move"]').forEach((button) => {
-    button.addEventListener('click', () => {
-      close();
-      if (!page) {
+    void (async () => {
+      const targetParent = await resolveCreateParent();
+      if (targetParent === null) {
         return;
       }
-      const toDir = button.dataset.folder ?? '';
-      void moveFsPage(page.relativePath, toDir)
+      void createFsFolder(targetParent, name.trim())
+        .then(() => callbacks.onTreeChanged?.())
+        .catch((err: unknown) => {
+          callbacks.onError?.(err instanceof Error ? err.message : 'Create folder failed');
+        });
+    })();
+  });
+
+  menu.querySelector('[data-action="delete"]')?.addEventListener('click', () => {
+    close();
+    if (kind === 'page' && page) {
+      if (!window.confirm(`Удалить «${page.title}»?`)) {
+        return;
+      }
+      void deleteFsNode(page.relativePath, 'page')
         .then(({ result }) => {
+          callbacks.onFsDeleted?.([result.slug]);
           callbacks.onTreeChanged?.();
           if (result.cascadeUpdated.length > 0) {
             callbacks.onNotify?.(
-              `Moved to ${result.relativePath}; updated links in ${result.cascadeUpdated.length} file(s).`,
+              `Deleted ${result.slug}; cleaned links in ${result.cascadeUpdated.length} file(s).`,
             );
-          } else if (result.slugChanged && result.inboundWarnings.length > 0) {
+          } else if (result.inboundWarnings.length > 0) {
             callbacks.onError?.(
-              `Moved; slug is now ${result.slug}. ${result.inboundWarnings.length} page(s) still reference the old slug.`,
+              `${result.inboundWarnings.length} page(s) still reference deleted slug "${result.slug}".`,
             );
           }
-          callbacks.onSelectSlug(result.slug);
         })
         .catch((err: unknown) => {
-          callbacks.onError?.(err instanceof Error ? err.message : 'Move failed');
+          callbacks.onError?.(err instanceof Error ? err.message : 'Delete failed');
         });
-    });
-  });
-
-  menu.querySelector('[data-action="delete-page"]')?.addEventListener('click', () => {
-    close();
-    if (!page) {
       return;
     }
-    if (!window.confirm(`Delete page "${page.title}"?`)) {
-      return;
+    if (kind === 'folder' && folderPath) {
+      if (!window.confirm(`Удалить «${folderPath}» и всё содержимое?`)) {
+        return;
+      }
+      void deleteFsNode(folderPath, 'folder')
+        .then(({ result }) => {
+          callbacks.onFsDeleted?.(result.deletedSlugs);
+          callbacks.onTreeChanged?.();
+          if (result.cascadeUpdated.length > 0) {
+            callbacks.onNotify?.(
+              `Deleted folder; cleaned links in ${result.cascadeUpdated.length} file(s).`,
+            );
+          } else if (result.inboundWarnings.length > 0) {
+            callbacks.onError?.(
+              `${result.inboundWarnings.length} page(s) still reference deleted page(s).`,
+            );
+          }
+        })
+        .catch((err: unknown) => {
+          callbacks.onError?.(err instanceof Error ? err.message : 'Delete folder failed');
+        });
     }
-    void deleteFsNode(page.relativePath, 'page')
-      .then(({ result }) => {
-        callbacks.onFsDeleted?.([result.slug]);
-        callbacks.onTreeChanged?.();
-        if (result.cascadeUpdated.length > 0) {
-          callbacks.onNotify?.(
-            `Deleted ${result.slug}; cleaned links in ${result.cascadeUpdated.length} file(s).`,
-          );
-        } else if (result.inboundWarnings.length > 0) {
-          callbacks.onError?.(
-            `${result.inboundWarnings.length} page(s) still reference deleted slug "${result.slug}".`,
-          );
-        }
-      })
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Delete failed');
-      });
-  });
-
-  menu.querySelector('[data-action="delete-folder"]')?.addEventListener('click', () => {
-    close();
-    if (!folderPath) {
-      return;
-    }
-    if (!window.confirm(`Delete folder "${folderPath}" and all pages inside?`)) {
-      return;
-    }
-    void deleteFsNode(folderPath, 'folder')
-      .then(({ result }) => {
-        callbacks.onFsDeleted?.(result.deletedSlugs);
-        callbacks.onTreeChanged?.();
-        if (result.cascadeUpdated.length > 0) {
-          callbacks.onNotify?.(
-            `Deleted folder; cleaned links in ${result.cascadeUpdated.length} file(s).`,
-          );
-        } else if (result.inboundWarnings.length > 0) {
-          callbacks.onError?.(
-            `${result.inboundWarnings.length} page(s) still reference deleted page(s).`,
-          );
-        }
-      })
-      .catch((err: unknown) => {
-        callbacks.onError?.(err instanceof Error ? err.message : 'Delete folder failed');
-      });
   });
 }
 
@@ -339,6 +225,16 @@ export function renderTreeSidebar(
   let activeSlug: string | null = null;
   let activeDraftId: string | null = null;
 
+  function rememberExpandedFolder(folderPath: string): void {
+    expanded.add('');
+    let acc = '';
+    for (const segment of folderPath.split('/').filter(Boolean)) {
+      acc = acc ? `${acc}/${segment}` : segment;
+      expanded.add(acc);
+    }
+    saveExpanded(expanded);
+  }
+
   async function openMenu(
     anchor: HTMLElement,
     options: Omit<Parameters<typeof showContextMenu>[1], 'templates'>,
@@ -353,14 +249,28 @@ export function renderTreeSidebar(
     }
   }
 
-  function renderPageRow(node: TreeNode & { kind: 'page' }, depth: number): HTMLElement {
+  function renderPageRow(node: TreePageNode, depth: number): HTMLElement {
+    const hasChildren = Boolean(node.childFolderPath);
+    const expandKey = node.childFolderPath ?? '';
+    const isOpen = hasChildren && expanded.has(expandKey);
+    const block = document.createElement('div');
+    block.className = hasChildren ? 'tree-folder tree-page-folder' : 'tree-page';
     const row = document.createElement('div');
     row.className = 'tree-row';
     row.style.paddingLeft = `${depth * 12 + 8}px`;
     if (node.slug === activeSlug) {
       row.classList.add('active');
     }
-    row.innerHTML = `
+    row.innerHTML = hasChildren
+      ? `
+      <button type="button" class="tree-toggle" aria-expanded="${isOpen}">${isOpen ? '▾' : '▸'}</button>
+      <button type="button" class="tree-label">
+        ${renderTreePageIcon(node.type, node.contentKind)}
+        <span class="tree-title">${escapeHtml(node.title)}</span>
+      </button>
+      <button type="button" class="tree-menu" title="Actions">⋯</button>
+    `
+      : `
       <span class="tree-spacer" aria-hidden="true"></span>
       <button type="button" class="tree-label">
         ${renderTreePageIcon(node.type, node.contentKind)}
@@ -372,14 +282,32 @@ export function renderTreeSidebar(
       ? node.relativePath.slice(0, node.relativePath.lastIndexOf('/'))
       : '';
 
+    if (hasChildren) {
+      row.querySelector('.tree-toggle')?.addEventListener('click', (event) => {
+        event.stopPropagation();
+        if (expanded.has(expandKey)) {
+          expanded.delete(expandKey);
+        } else {
+          expanded.add(expandKey);
+        }
+        saveExpanded(expanded);
+        renderTree();
+      });
+    }
+
     row.querySelector('.tree-menu')?.addEventListener('click', (event) => {
       event.stopPropagation();
       void openMenu(event.currentTarget as HTMLElement, {
         kind: 'page',
         parentPath,
-        folderPath: parentPath,
+        folderPath: node.childFolderPath ?? parentPath,
         page: node,
-        tree,
+        resolveCreateParent: () =>
+          resolveCreateParentForPage(node, {
+            onTreeChanged: callbacks.onTreeChanged,
+            onError: callbacks.onError,
+            onExpandFolder: rememberExpandedFolder,
+          }),
       });
     });
 
@@ -390,7 +318,31 @@ export function renderTreeSidebar(
       renderDrafts();
       callbacks.onSelectSlug(node.slug);
     });
-    return row;
+
+    applyTreeRowDragSource(row, 'page', node.relativePath);
+    if (node.childFolderPath) {
+      applyTreeRowDropTarget(row, node.childFolderPath);
+    }
+
+    block.appendChild(row);
+
+    if (hasChildren && isOpen && node.children) {
+      const children = document.createElement('div');
+      children.className = 'tree-children';
+      if (node.childFolderPath) {
+        applyTreeChildrenDropTarget(children, node.childFolderPath);
+      }
+      for (const child of node.children) {
+        if (child.kind === 'folder') {
+          children.appendChild(renderFolder(child, depth + 1));
+        } else {
+          children.appendChild(renderPageRow(child, depth + 1));
+        }
+      }
+      block.appendChild(children);
+    }
+
+    return block;
   }
 
   function renderFolder(node: TreeFolderNode, depth: number): HTMLElement {
@@ -421,14 +373,6 @@ export function renderTreeSidebar(
     });
 
     row.querySelector('.tree-label')?.addEventListener('click', () => {
-      if (node.indexPageSlug) {
-        activeSlug = node.indexPageSlug;
-        activeDraftId = null;
-        renderTree();
-        renderDrafts();
-        callbacks.onSelectSlug(node.indexPageSlug);
-        return;
-      }
       if (expanded.has(node.relativePath)) {
         expanded.delete(node.relativePath);
       } else {
@@ -444,15 +388,19 @@ export function renderTreeSidebar(
         kind: 'folder',
         parentPath: node.relativePath,
         folderPath: node.relativePath,
-        tree,
+        resolveCreateParent: async () => node.relativePath,
       });
     });
+
+    applyTreeRowDragSource(row, 'folder', node.relativePath);
+    applyTreeRowDropTarget(row, node.relativePath);
 
     block.appendChild(row);
 
     if (isOpen) {
       const children = document.createElement('div');
       children.className = 'tree-children';
+      applyTreeChildrenDropTarget(children, node.relativePath);
       for (const child of node.children ?? []) {
         if (child.kind === 'folder') {
           children.appendChild(renderFolder(child, depth + 1));
@@ -497,6 +445,12 @@ export function renderTreeSidebar(
 
   renderTree();
   renderDrafts();
+
+  bindTreeDnD(treeEl, {
+    onTreeChanged: callbacks.onTreeChanged,
+    onError: callbacks.onError,
+    onNotify: callbacks.onNotify,
+  });
 
   container.querySelector('[data-catalog="__drafts__"]')?.addEventListener('click', () => {
     const list = container.querySelector('#draft-list');
@@ -555,10 +509,6 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
-}
-
-function escapeAttr(text: string): string {
-  return escapeHtml(text);
 }
 
 declare global {

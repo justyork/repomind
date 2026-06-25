@@ -22,6 +22,7 @@ import {
 import { bindThemeToggle, initTheme } from './theme.js';
 import { bindKeyboardNav, collectTreeSlugs } from './keyboard-nav.js';
 import { renderTreeSidebar } from './tree-sidebar.js';
+import { bindSidebarResize } from './sidebar-resize.js';
 import { subscribeDocsReload } from './live-reload.js';
 import {
   normalizeAppUrl,
@@ -62,6 +63,11 @@ async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
 
 async function main(): Promise<void> {
   bindThemeToggle(document.querySelector<HTMLButtonElement>('#theme-toggle'));
+
+  const layoutEl = document.querySelector<HTMLElement>('.layout');
+  if (layoutEl) {
+    bindSidebarResize(layoutEl);
+  }
 
   const sidebarEl = document.querySelector<HTMLElement>('#sidebar')!;
   const workspaceEl = document.querySelector<HTMLElement>('#workspace')!;

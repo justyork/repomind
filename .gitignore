@@ -6,13 +6,8 @@ dist/
 ui/dist/
 *.tsbuildinfo
 
-# gstack ephemeral state (project artifacts under .gstack/projects/ are tracked)
-.gstack/tmp/
-.gstack/sessions/
-.gstack/analytics/
-.gstack/slug-cache/
-
-# RepoMind runtime
+# gstack local project state (not shipped; set GSTACK_HOME=.gstack in .env)
+.gstack/
 .project-knowledge/.worktrees/
 ab-demo/results/*.json
 ab-demo/results/*-blind.md
