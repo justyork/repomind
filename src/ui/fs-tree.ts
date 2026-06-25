@@ -18,6 +18,9 @@ export interface TreePageNode {
   status: string;
   type: string;
   contentKind: 'markdown' | 'yaml' | 'json';
+  /** Sibling folder `{parent}/{name}/` when Confluence-style page+folder pair exists. */
+  childFolderPath?: string;
+  children?: TreeNode[];
 }
 
 export interface TreeFolderNode {
@@ -44,6 +47,25 @@ interface BuildContext {
 
 function knowledgeFileDisplayName(fileName: string): string {
   return fileName.replace(/\.(md|ya?ml|json)$/i, '');
+}
+
+function findSiblingDirName(dirNames: string[], fileName: string): string | null {
+  const base = knowledgeFileDisplayName(fileName);
+  const exact = dirNames.find((name) => name === base);
+  if (exact) {
+    return exact;
+  }
+  const lower = base.toLowerCase();
+  return dirNames.find((name) => name.toLowerCase() === lower) ?? null;
+}
+
+function hasSiblingKnowledgePage(entries: Array<{ name: string; isDirectory: boolean }>, dirName: string): boolean {
+  return entries.some(
+    (entry) =>
+      !entry.isDirectory &&
+      isKnowledgeFileName(entry.name) &&
+      knowledgeFileDisplayName(entry.name).toLowerCase() === dirName.toLowerCase(),
+  );
 }
 
 function listDirEntries(dirPath: string): Array<{ name: string; isDirectory: boolean }> {
@@ -80,6 +102,7 @@ export function folderDisplayName(relativePath: string): string {
 function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): TreeFolderNode {
   const entries = listDirEntries(absPath);
   const children: TreeNode[] = [];
+  const dirNames = entries.filter((entry) => entry.isDirectory).map((entry) => entry.name);
 
   const readmeRel = readmeIndexRelativePath(relativePath);
 
@@ -98,6 +121,9 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
       if (IGNORED_DIRS.has(entry.name)) {
         continue;
       }
+      if (hasSiblingKnowledgePage(entries, entry.name)) {
+        continue;
+      }
       const childRel = joinRelativePath(relativePath, entry.name);
       children.push(buildFolder(childRel, path.join(absPath, entry.name), ctx));
       continue;
@@ -108,12 +134,27 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
     }
 
     const fileRel = joinRelativePath(relativePath, entry.name);
-    if (fileRel === readmeRel && indexPageSlug) {
+    const doc = ctx.docsByRelative.get(fileRel);
+    if (!doc) {
       continue;
     }
 
-    const doc = ctx.docsByRelative.get(fileRel);
-    if (!doc) {
+    const siblingDir = findSiblingDirName(dirNames, entry.name);
+    if (siblingDir) {
+      const childFolderRel = joinRelativePath(relativePath, siblingDir);
+      const nested = buildFolder(childFolderRel, path.join(absPath, siblingDir), ctx);
+      children.push({
+        kind: 'page',
+        name: knowledgeFileDisplayName(entry.name),
+        relativePath: fileRel,
+        slug: doc.slug,
+        title: doc.title,
+        status: doc.status,
+        type: doc.type,
+        contentKind: doc.contentKind,
+        childFolderPath: childFolderRel,
+        children: nested.children,
+      });
       continue;
     }
 
@@ -174,45 +215,32 @@ export function findTreePageSlug(
   relativePath: string,
 ): string | null {
   const normalized = normalizeRelativePath(relativePath);
-  for (const child of node.children) {
-    if (child.kind === 'page' && child.relativePath === normalized) {
-      return child.slug;
-    }
-    if (child.kind === 'folder') {
-      const found = findTreePageSlug(child, normalized);
-      if (found) {
-        return found;
+
+  function search(nodes: TreeNode[]): string | null {
+    for (const child of nodes) {
+      if (child.kind === 'page') {
+        if (child.relativePath === normalized) {
+          return child.slug;
+        }
+        if (child.children) {
+          const nested = search(child.children);
+          if (nested) {
+            return nested;
+          }
+        }
+        continue;
+      }
+      const nested = findTreePageSlug(child, normalized);
+      if (nested) {
+        return nested;
       }
     }
+    return null;
   }
-  return null;
+
+  return search(node.children);
 }
 
-export function collectParentOfEdges(tree: TreeFolderNode | null): LinkEdge[] {
-  if (!tree) {
-    return [];
-  }
-  const edges: LinkEdge[] = [];
-
-  function walk(folder: TreeFolderNode): void {
-    if (folder.indexPageSlug) {
-      for (const child of folder.children ?? []) {
-        if (child.kind === 'page' && child.slug !== folder.indexPageSlug) {
-          edges.push({
-            from: folder.indexPageSlug,
-            to: child.slug,
-            kind: 'parent_of',
-          });
-        }
-      }
-    }
-    for (const child of folder.children ?? []) {
-      if (child.kind === 'folder') {
-        walk(child);
-      }
-    }
-  }
-
-  walk(tree);
-  return edges;
+export function collectParentOfEdges(_tree: TreeFolderNode | null): LinkEdge[] {
+  return [];
 }

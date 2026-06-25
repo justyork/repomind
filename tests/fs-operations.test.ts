@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DocIndex } from '../src/index/doc-index.ts';
-import { movePageFile, renamePageFile, deletePageFile, deleteFolder } from '../src/ui/fs-operations.ts';
+import { movePageFile, moveFolder, promotePageToFolder, renamePageFile, deletePageFile, deleteFolder } from '../src/ui/fs-operations.ts';
 
 const tmpRoots: string[] = [];
 
@@ -149,5 +149,118 @@ title: Old
     writeDoc(repo, 'docs/root.md', '---\ntype: wiki-page\nslug: root\nstatus: draft\ntitle: Root\n---\n');
     const index = new DocIndex(repo);
     expect(() => deleteFolder(index, '')).toThrow(/cannot delete docs root/);
+  });
+
+  it('promotes a leaf page by creating a sibling folder and preserves slug', () => {
+    const repo = makeTempDir();
+    writeDoc(
+      repo,
+      'docs/product/wiki/roadmap.md',
+      `---
+type: wiki-page
+slug: product-wiki-roadmap
+status: accepted
+title: Roadmap
+related:
+  - other-page
+---
+# Roadmap
+
+See [[other-page]].
+`,
+    );
+    writeDoc(
+      repo,
+      'docs/product/wiki/other.md',
+      `---
+type: wiki-page
+slug: other-page
+status: accepted
+title: Other
+---
+`,
+    );
+
+    const index = new DocIndex(repo);
+    const result = promotePageToFolder(index, 'product/wiki/roadmap.md');
+
+    expect(result.folderPath).toBe('product/wiki/roadmap');
+    expect(result.relativePath).toBe('product/wiki/roadmap.md');
+    expect(result.slug).toBe('product-wiki-roadmap');
+    expect(result.slugChanged).toBe(false);
+    expect(result.cascadeUpdated).toEqual([]);
+    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap.md'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap/README.md'))).toBe(false);
+
+    const readmeRaw = fs.readFileSync(path.join(repo, 'docs/product/wiki/roadmap.md'), 'utf8');
+    expect(readmeRaw).toContain('slug: product-wiki-roadmap');
+    expect(index.getDocBySlug('product-wiki-roadmap')).toBeTruthy();
+  });
+
+  it('promote is idempotent when sibling folder already exists', () => {
+    const repo = makeTempDir();
+    writeDoc(repo, 'docs/wiki/topic.md', '---\ntype: wiki-page\nslug: topic\nstatus: draft\ntitle: Topic\n---\n');
+    fs.mkdirSync(path.join(repo, 'docs/wiki/topic'), { recursive: true });
+
+    const index = new DocIndex(repo);
+    const result = promotePageToFolder(index, 'wiki/topic.md');
+    expect(result.folderPath).toBe('wiki/topic');
+    expect(fs.existsSync(path.join(repo, 'docs/wiki/topic.md'))).toBe(true);
+  });
+
+  it('moves a folder with Confluence sibling page and updates nested slugs', () => {
+    const repo = makeTempDir();
+    writeDoc(
+      repo,
+      'docs/wiki/roadmap.md',
+      `---
+type: wiki-page
+slug: wiki-roadmap
+status: accepted
+title: Roadmap
+---
+`,
+    );
+    writeDoc(
+      repo,
+      'docs/wiki/roadmap/child.md',
+      `---
+type: wiki-page
+slug: wiki-roadmap-child
+status: draft
+title: Child
+---
+`,
+    );
+    writeDoc(
+      repo,
+      'docs/product/home.md',
+      `---
+type: wiki-page
+slug: product-home
+status: accepted
+title: Home
+related:
+  - wiki-roadmap-child
+---
+`,
+    );
+
+    const index = new DocIndex(repo);
+    const result = moveFolder(index, 'wiki/roadmap', 'product');
+
+    expect(result.relativePath).toBe('product/roadmap');
+    expect(result.siblingPagePath).toBe('product/roadmap.md');
+    expect(fs.existsSync(path.join(repo, 'docs/product/roadmap.md'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, 'docs/product/roadmap/child.md'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, 'docs/wiki/roadmap.md'))).toBe(false);
+
+    const childRaw = fs.readFileSync(path.join(repo, 'docs/product/roadmap/child.md'), 'utf8');
+    expect(childRaw).toContain('slug: product-roadmap-child');
+
+    const homeRaw = fs.readFileSync(path.join(repo, 'docs/product/home.md'), 'utf8');
+    expect(homeRaw).toContain('product-roadmap-child');
+    expect(result.cascadeUpdated).toContain('product/home.md');
   });
 });

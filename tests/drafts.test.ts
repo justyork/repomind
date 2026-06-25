@@ -120,6 +120,61 @@ describe('publishDraft', () => {
     db.close();
   });
 
+  it('allows publish for tree-created page when forked_from is set', () => {
+    const repo = makeTempDir();
+    writeDoc(repo, 'docs/glossary/base.md', '---\ntype: glossary-term\nslug: base\nstatus: accepted\n---\n');
+    const index = new DocIndex(repo);
+    const db = openDraftsDb(index.getKnowledgeRoot()!);
+
+    const targetPath = 'glossary/tree-page.md';
+    writeDoc(
+      repo,
+      `docs/${targetPath}`,
+      '---\ntype: glossary-term\nslug: tree-page\nstatus: draft\ntitle: Tree Page\n---\n# Tree Page\n\n',
+    );
+    index.refresh();
+
+    const draft = db.create({
+      slug: 'tree-page',
+      type: 'glossary-term',
+      title: 'Tree Page',
+      body: '# Tree Page\n\nEdited in UI.',
+      forked_from: 'tree-page',
+      target_path: targetPath,
+    });
+
+    expect(validateDraftForPublish(index, draft)).toBeNull();
+    const result = publishDraft(index, draft);
+    expect(fs.readFileSync(result.path, 'utf8')).toContain('Edited in UI.');
+
+    db.close();
+  });
+
+  it('blocks publish for on-disk page draft without forked_from', () => {
+    const repo = makeTempDir();
+    const targetPath = 'glossary/orphan-page.md';
+    writeDoc(
+      repo,
+      `docs/${targetPath}`,
+      '---\ntype: glossary-term\nslug: orphan-page\nstatus: draft\ntitle: Orphan\n---\n# Orphan\n\n',
+    );
+    const index = new DocIndex(repo);
+    const db = openDraftsDb(index.getKnowledgeRoot()!);
+
+    const draft = db.create({
+      slug: 'orphan-page',
+      type: 'glossary-term',
+      title: 'Orphan',
+      body: 'Body',
+      target_path: targetPath,
+    });
+
+    const err = validateDraftForPublish(index, draft);
+    expect(err?.code).toBe('path_conflict');
+
+    db.close();
+  });
+
   it('blocks publish when related slug missing', () => {
     const repo = makeTempDir();
     writeDoc(repo, 'docs/glossary/a.md', '---\ntype: glossary-term\nslug: a\nstatus: draft\n---\n');

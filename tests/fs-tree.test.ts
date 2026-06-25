@@ -79,8 +79,8 @@ domain: product
   });
 });
 
-describe('buildDocsTree README index', () => {
-  it('uses README.md as folder index and hides it from children', () => {
+describe('buildDocsTree README files', () => {
+  it('lists README.md as regular page nodes in the tree', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
@@ -142,8 +142,58 @@ title: Legacy Index
     expect(specs.indexPageSlug).toBe('specs-readme');
     expect(specs.indexPageType).toBe('feature-spec');
     expect(specs.children.some((child) => child.kind === 'page' && child.relativePath === 'specs/README.md')).toBe(
+      true,
+    );
+    expect(specs.children.some((child) => child.kind === 'page' && child.slug === 'specs-readme')).toBe(true);
+    expect(specs.children.some((child) => child.kind === 'page' && child.slug === 'legacy-index')).toBe(true);
+  });
+});
+
+describe('buildDocsTree sibling page+folder', () => {
+  it('merges same-named page file and folder into one expandable page node', () => {
+    const repo = makeTempDir();
+    writeDoc(
+      repo,
+      'docs/wiki/roadmap.md',
+      `---
+type: wiki-page
+slug: wiki-roadmap
+status: accepted
+title: Roadmap
+---
+`,
+    );
+    writeDoc(
+      repo,
+      'docs/wiki/roadmap/child.md',
+      `---
+type: wiki-page
+slug: wiki-roadmap-child
+status: draft
+title: Child
+---
+`,
+    );
+
+    const tree = buildDocsTree(new DocIndex(repo));
+    const wiki = tree?.children.find((child) => child.kind === 'folder' && child.relativePath === 'wiki');
+    expect(wiki?.kind).toBe('folder');
+    if (wiki?.kind !== 'folder') {
+      return;
+    }
+
+    expect(wiki.children.some((child) => child.kind === 'folder' && child.relativePath === 'wiki/roadmap')).toBe(
       false,
     );
-    expect(specs.children.some((child) => child.kind === 'page' && child.slug === 'legacy-index')).toBe(true);
+
+    const roadmap = wiki.children.find((child) => child.kind === 'page' && child.relativePath === 'wiki/roadmap.md');
+    expect(roadmap?.kind).toBe('page');
+    if (roadmap?.kind !== 'page') {
+      return;
+    }
+    expect(roadmap.childFolderPath).toBe('wiki/roadmap');
+    expect(roadmap.children?.some((child) => child.kind === 'page' && child.slug === 'wiki-roadmap-child')).toBe(
+      true,
+    );
   });
 });
