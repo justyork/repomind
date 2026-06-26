@@ -191,7 +191,7 @@ function renderReadMode(
   const shell = renderPageShell(container, {
     rootClass: 'workspace-main workspace-page',
     breadcrumbs: pageBreadcrumbs(doc, title, type),
-    titleHtml: `<h1 class="doc-title reader-title${isStructured ? '' : ' reader-title--editable'}" tabindex="0">${escapeHtml(title)}</h1>`,
+    titleHtml: `<h1 class="doc-title reader-title">${escapeHtml(title)}</h1>`,
     actionsHtml: `
       <button type="button" id="toggle-focus" class="btn-ghost" aria-pressed="${focusMode}">
         ${focusMode ? 'Show info' : 'Hide info'}
@@ -201,9 +201,8 @@ function renderReadMode(
       <button type="button" id="copy-path" class="btn-ghost">Copy path</button>
     `,
     mainHtml: `
-      <div class="reader-body${isStructured ? '' : ' reader-body--editable'}">
+      <div class="reader-body">
         <div id="tab-preview" class="markdown-preview reader-preview"></div>
-        <p class="reader-edit-hint${isStructured ? ' hidden' : ''}">Click anywhere to edit</p>
         <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
       </div>
     `,
@@ -287,24 +286,6 @@ function renderReadMode(
   };
 
   container.querySelector<HTMLButtonElement>('#edit-page')?.addEventListener('click', beginEdit);
-
-  const titleEl = container.querySelector<HTMLElement>('.reader-title--editable');
-  titleEl?.addEventListener('click', beginEdit);
-  titleEl?.addEventListener('keydown', (event) => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      beginEdit();
-    }
-  });
-
-  const readerBody = container.querySelector<HTMLElement>('.reader-body--editable');
-  readerBody?.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement;
-    if (target.closest('a, button, .reader-backlinks')) {
-      return;
-    }
-    beginEdit();
-  });
 
   if (doc.slug && !isStructured) {
     void getBacklinks(doc.slug)
