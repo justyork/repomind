@@ -786,44 +786,6 @@ body {
   line-height: 1.6;
 }
 
-.reader-body--editable {
-  cursor: text;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  max-width: calc(72ch + 2rem);
-  box-sizing: border-box;
-  transition: background 0.15s ease;
-}
-
-.reader-body--editable:hover {
-  background: var(--accent-subtle);
-}
-
-.reader-title--editable {
-  cursor: text;
-  border-radius: 6px;
-  padding: 0.35rem 1rem;
-  max-width: calc(72ch + 2rem);
-  box-sizing: border-box;
-  transition: background 0.15s ease;
-}
-
-.reader-title--editable:hover {
-  background: var(--accent-subtle);
-}
-
-.reader-title--editable:focus {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: 2px;
-  background: var(--accent-subtle);
-}
-
-.reader-edit-hint {
-  margin: 0.75rem 0 0;
-  font-size: 0.8rem;
-  color: var(--muted);
-}
-
 .reader-loading {
   color: var(--muted);
   padding: 1rem 0;

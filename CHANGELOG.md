@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.1.1] - 2026-06-26
+
+### Added
+
+- **Favicon** — RepoMind icon in browser tab for workspace and graph pages
+
+### Changed
+
+- **Tree folder icons** — catalog rows show a folder icon; page icon only on file rows and Confluence page+folder pairs
+- **Read mode** — editing starts only from the Edit button (removed click-to-edit on title and body)
+
 ## [0.7.1.0] - 2026-06-24
 
 ### Added
