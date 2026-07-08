@@ -21,6 +21,6 @@
 - Folder index pages live at `README.md` inside the folder (e.g. `docs/specs/README.md`); the README is hidden from tree children and its title/slug powers the folder row (click opens the page, chevron expands children). Root index is `docs/README.md`. Legacy same-name sibling pairs (`roadmap.md` + `roadmap/`) still work as folder indexes and are also hidden from the tree; prefer `README.md` for new folders. Promoting a leaf page moves it to `{folder}/README.md`.
 - UI routing is SPA at `/` with `?slug=` deep links; avoid path-based browser navigation outside `/`.
 - Primary dogfood target: `~/www/GAMEDEV/skyforge-caravan` (SFC).
-- npm package `@justyork/repo-mind` on registry (scoped due to npm `repomind` name conflict); CLI `repo-mind`. Current on `main`: **0.7.0.0**.
+- npm package `@justyork/repo-mind` on registry (scoped due to npm `repomind` name conflict); CLI `repo-mind`. Current on `main`: **0.8.0**.
 - Agent write (E4/E5, 0.6.0): `create_draft` MCP and `repo-mind publish --pr` use SQLite drafts (not git worktree); gated on ab-demo kill-switch P2 (`REPOMIND_AGENT_WRITE=1` override for local dev).
 - v4.0 prove exit (B1 skyforge dogfood + B2b live hallucination gate) still in progress; tracked in GitHub issue #13. Visual WYSIWYG editor (TipTap) shipped 0.4.x; unified page workspace shipped 0.7.0.
