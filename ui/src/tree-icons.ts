@@ -51,10 +51,12 @@ export function renderTreePageIcon(type: string, contentKind: 'markdown' | 'yaml
 }
 
 /**
- * Folder row icon: always a folder.
- * Page icon is reserved for file rows, including Confluence page+folder pairs
- * (same-named `name.md` + `name/` merged into one expandable page node).
+ * Folder row icon: page icon when the folder has an index page (README.md),
+ * otherwise a folder icon.
  */
-export function renderTreeFolderNodeIcon(_node: TreeFolderNode): string {
+export function renderTreeFolderNodeIcon(node: TreeFolderNode): string {
+  if (node.indexPageSlug && node.indexPageType && node.indexPageContentKind) {
+    return renderTreePageIcon(node.indexPageType, node.indexPageContentKind);
+  }
   return renderTreeFolderIcon();
 }

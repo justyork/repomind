@@ -1,6 +1,6 @@
 {
   "name": "@justyork/repo-mind",
-  "version": "0.7.1.1",
+  "version": "0.7.2",
   "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {
@@ -9,7 +9,8 @@
   "files": [
     "dist",
     "ui/dist",
-    "templates"
+    "templates",
+    ".cursor/skills/repomind-docs"
   ],
   "scripts": {
     "build": "tsc && npm run build:ui",

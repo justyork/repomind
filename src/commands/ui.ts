@@ -5,6 +5,7 @@ import { closeAllDocsEventStreams } from '../ui/api-handlers.js';
 import { DocsWatcher } from '../ui/docs-watcher.js';
 import { openDraftsDb } from '../ui/db/drafts-db.js';
 import { destroyUiServerConnections, resolveUiStaticDir, startUiServer } from '../ui/server.js';
+import { createOptionalUiAuth } from '../ui/auth.js';
 
 export interface UiCommandOptions {
   cwd?: string;
@@ -33,6 +34,7 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
     const draftsDb = openDraftsDb(index.getKnowledgeRoot()!);
     const docsWatcher = new DocsWatcher(index);
     docsWatcher.start(index.getKnowledgeRoot()!);
+    const auth = createOptionalUiAuth();
     const server = await startUiServer({
       host: '127.0.0.1',
       port,
@@ -40,12 +42,14 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
       staticDir,
       draftsDb,
       docsWatcher,
+      auth,
     });
 
     const docCount = index.refresh().length;
     const draftCount = draftsDb.listActive().length;
+    const authNote = auth ? ' · password auth enabled' : '';
     console.log(
-      `RepoMind UI at http://127.0.0.1:${port} (${docCount} docs, ${draftCount} drafts)`,
+      `RepoMind UI at http://127.0.0.1:${port} (${docCount} docs, ${draftCount} drafts${authNote})`,
     );
     console.log('Press Ctrl+C to stop');
 

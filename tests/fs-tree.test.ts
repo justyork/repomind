@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { DocIndex } from '../src/index/doc-index.ts';
-import { buildDocsTree, folderDisplayName, readmeIndexRelativePath } from '../src/ui/fs-tree.ts';
+import { buildDocsTree, folderDisplayName, readmeIndexRelativePath, siblingPageIndexRelativePath } from '../src/ui/fs-tree.ts';
 
 const tmpRoots: string[] = [];
 
@@ -29,6 +29,13 @@ describe('readmeIndexRelativePath', () => {
   it('resolves root and nested README paths', () => {
     expect(readmeIndexRelativePath('')).toBe('README.md');
     expect(readmeIndexRelativePath('specs')).toBe('specs/README.md');
+  });
+});
+
+describe('siblingPageIndexRelativePath', () => {
+  it('resolves legacy sibling index paths', () => {
+    expect(siblingPageIndexRelativePath('')).toBeNull();
+    expect(siblingPageIndexRelativePath('wiki/roadmap')).toBe('wiki/roadmap.md');
   });
 });
 
@@ -80,7 +87,7 @@ domain: product
 });
 
 describe('buildDocsTree README files', () => {
-  it('lists README.md as regular page nodes in the tree', () => {
+  it('uses README.md as folder index and hides it from tree children', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
@@ -141,16 +148,17 @@ title: Legacy Index
     }
     expect(specs.indexPageSlug).toBe('specs-readme');
     expect(specs.indexPageType).toBe('feature-spec');
+    expect(specs.indexPageTitle).toBe('Specs Index');
+    expect(specs.indexPageRelativePath).toBe('specs/README.md');
     expect(specs.children.some((child) => child.kind === 'page' && child.relativePath === 'specs/README.md')).toBe(
-      true,
+      false,
     );
-    expect(specs.children.some((child) => child.kind === 'page' && child.slug === 'specs-readme')).toBe(true);
     expect(specs.children.some((child) => child.kind === 'page' && child.slug === 'legacy-index')).toBe(true);
   });
 });
 
 describe('buildDocsTree sibling page+folder', () => {
-  it('merges same-named page file and folder into one expandable page node', () => {
+  it('uses legacy sibling page as folder index and shows the folder as a normal row', () => {
     const repo = makeTempDir();
     writeDoc(
       repo,
@@ -182,18 +190,18 @@ title: Child
       return;
     }
 
-    expect(wiki.children.some((child) => child.kind === 'folder' && child.relativePath === 'wiki/roadmap')).toBe(
-      false,
-    );
-
-    const roadmap = wiki.children.find((child) => child.kind === 'page' && child.relativePath === 'wiki/roadmap.md');
-    expect(roadmap?.kind).toBe('page');
-    if (roadmap?.kind !== 'page') {
+    const roadmap = wiki.children.find((child) => child.kind === 'folder' && child.relativePath === 'wiki/roadmap');
+    expect(roadmap?.kind).toBe('folder');
+    if (roadmap?.kind !== 'folder') {
       return;
     }
-    expect(roadmap.childFolderPath).toBe('wiki/roadmap');
-    expect(roadmap.children?.some((child) => child.kind === 'page' && child.slug === 'wiki-roadmap-child')).toBe(
-      true,
+
+    expect(roadmap.indexPageSlug).toBe('wiki-roadmap');
+    expect(roadmap.indexPageTitle).toBe('Roadmap');
+    expect(roadmap.indexPageRelativePath).toBe('wiki/roadmap.md');
+    expect(roadmap.children.some((child) => child.kind === 'page' && child.relativePath === 'wiki/roadmap.md')).toBe(
+      false,
     );
+    expect(roadmap.children.some((child) => child.kind === 'page' && child.slug === 'wiki-roadmap-child')).toBe(true);
   });
 });

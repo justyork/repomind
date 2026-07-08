@@ -9,19 +9,11 @@ function sampleTree(): TreeFolderNode {
     relativePath: '',
     emoji: null,
     indexPageSlug: 'readme',
+    indexPageTitle: 'Readme',
+    indexPageRelativePath: 'README.md',
     indexPageType: 'wiki-page',
     indexPageContentKind: 'markdown',
     children: [
-      {
-        kind: 'page',
-        name: 'README',
-        relativePath: 'README.md',
-        slug: 'readme',
-        title: 'Readme',
-        status: 'accepted',
-        type: 'wiki-page',
-        contentKind: 'markdown',
-      },
       {
         kind: 'page',
         name: 'caravan',
@@ -38,19 +30,11 @@ function sampleTree(): TreeFolderNode {
         relativePath: 'specs',
         emoji: null,
         indexPageSlug: 'specs-readme',
+        indexPageTitle: 'Specs Readme',
+        indexPageRelativePath: 'specs/README.md',
         indexPageType: 'wiki-page',
         indexPageContentKind: 'markdown',
         children: [
-          {
-            kind: 'page',
-            name: 'README',
-            relativePath: 'specs/README.md',
-            slug: 'specs-readme',
-            title: 'Specs Readme',
-            status: 'accepted',
-            type: 'wiki-page',
-            contentKind: 'markdown',
-          },
           {
             kind: 'page',
             name: 'convoy-rules',
@@ -69,11 +53,6 @@ function sampleTree(): TreeFolderNode {
 
 describe('collectTreeSlugs', () => {
   it('returns depth-first slug order', () => {
-    expect(collectTreeSlugs(sampleTree())).toEqual([
-      'readme',
-      'caravan',
-      'specs-readme',
-      'convoy-rules',
-    ]);
+    expect(collectTreeSlugs(sampleTree())).toEqual(['caravan', 'convoy-rules']);
   });
 });

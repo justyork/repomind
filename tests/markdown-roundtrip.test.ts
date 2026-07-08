@@ -21,6 +21,7 @@ const CORPUS: Array<{ name: string; markdown: string }> = [
   { name: 'multiple wikilinks', markdown: 'Links: [[caravan]] and [[convoy-rules]].' },
   { name: 'bullet list', markdown: '- First item\n- Second item' },
   { name: 'ordered list', markdown: '1. Step one\n2. Step two' },
+  { name: 'ordered list custom start', markdown: '5. Step five\n6. Step six' },
   { name: 'task unchecked', markdown: '- [ ] Todo item' },
   { name: 'task checked', markdown: '- [x] Done item' },
   { name: 'task list', markdown: '- [ ] Todo\n- [x] Done' },
@@ -61,6 +62,13 @@ describe('markdown-roundtrip', () => {
     const paragraph = doc.content?.[0];
     const wikilink = paragraph?.content?.find((node) => node.type === 'wikilink');
     expect(wikilink?.attrs).toEqual({ slug: 'caravan', label: 'Caravan' });
+  });
+
+  it('preserves ordered list start in doc JSON', () => {
+    const doc = parseMarkdownToDoc('5. Fifth\n6. Sixth');
+    const list = doc.content?.[0];
+    expect(list?.type).toBe('orderedList');
+    expect(list?.attrs).toEqual({ start: 5 });
   });
 
   it('serializes wikilink back to markdown', () => {

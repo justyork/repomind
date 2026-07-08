@@ -7,6 +7,7 @@ import {
 } from './draft-session.js';
 import type { EditorCallbacks } from './draft-session.js';
 import { bindFocusToggle, loadFocusMode, renderPageShell } from './page-shell.js';
+import { scheduleWorkspaceScrollReset } from './workspace-scroll.js';
 
 export type { EditorCallbacks } from './draft-session.js';
 
@@ -35,6 +36,7 @@ export function renderDraftEditor(
   });
 
   bindFocusToggle(container, focusMode);
+  scheduleWorkspaceScrollReset(container);
 
   return bindDraftSession(container, shell, draft, callbacks, docIndex);
 }

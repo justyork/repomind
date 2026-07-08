@@ -1,10 +1,6 @@
 import { promoteFsPage, type TreePageNode } from './api.js';
 
 export function createParentPathForPage(page: TreePageNode): string {
-  if (page.childFolderPath) {
-    return page.childFolderPath;
-  }
-
   const rel = page.relativePath.replace(/\\/g, '/');
   if (rel === 'README.md') {
     return '';
@@ -23,10 +19,6 @@ export function createParentPathForPage(page: TreePageNode): string {
 }
 
 export function pageNeedsPromote(page: TreePageNode): boolean {
-  if (page.childFolderPath) {
-    return false;
-  }
-
   const rel = page.relativePath.replace(/\\/g, '/');
   if (rel === 'README.md') {
     return false;

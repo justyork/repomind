@@ -32,6 +32,7 @@ import {
   subscribePopState,
   writeSlugToUrl,
 } from './navigation.js';
+import { ensureAuthenticated } from './auth-gate.js';
 
 normalizeAppUrl();
 initTheme();
@@ -62,6 +63,15 @@ async function reloadDrafts(sidebarEl: HTMLElement): Promise<Draft[]> {
 }
 
 async function main(): Promise<void> {
+  const appRoot = document.querySelector<HTMLElement>('#app');
+  if (!appRoot) {
+    return;
+  }
+  const authed = await ensureAuthenticated(appRoot);
+  if (!authed) {
+    return;
+  }
+
   bindThemeToggle(document.querySelector<HTMLButtonElement>('#theme-toggle'));
 
   const layoutEl = document.querySelector<HTMLElement>('.layout');

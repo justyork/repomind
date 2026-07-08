@@ -17,6 +17,7 @@ import {
   resolveUnderKnowledgeRoot,
 } from './safe-path.js';
 import { cascadeSlugDelete, cascadeSlugRename, toRelativePaths } from './link-cascade.js';
+import { readmeIndexRelativePath, siblingPageIndexRelativePath } from './fs-tree.js';
 
 export interface CreateFolderResult {
   relativePath: string;
@@ -197,7 +198,7 @@ function rewritePageFrontmatter(
   return { newSlug, newType };
 }
 
-/** Creates sibling folder `{parent}/{basename}/` for a leaf page (Confluence-style); page file stays in place. */
+/** Creates `{parent}/{basename}/README.md` from a leaf page file. */
 export function promotePageToFolder(index: DocIndex, pagePath: string): PromotePageResult {
   const knowledgeRoot = index.getKnowledgeRoot();
   if (!knowledgeRoot) {
@@ -239,12 +240,38 @@ export function promotePageToFolder(index: DocIndex, pagePath: string): PromoteP
     fs.mkdirSync(folderAbsolute, { recursive: true });
   }
 
-  const previousSlug = readPageSlug(sourceAbsolute);
+  const readmeRelative = readmeIndexRelativePath(folderRelative);
+  const readmeAbsolute = resolveRelativeMdPath(knowledgeRoot, readmeRelative);
+  if (!readmeAbsolute) {
+    throw new Error('path escapes docs/');
+  }
+
+  if (fs.existsSync(readmeAbsolute)) {
+    if (sourceAbsolute === readmeAbsolute) {
+      index.refresh();
+      const previousSlug = readPageSlug(readmeAbsolute);
+      return {
+        relativePath: readmeRelative,
+        absolutePath: readmeAbsolute,
+        slug: previousSlug,
+        previousSlug,
+        slugChanged: false,
+        inboundWarnings: [],
+        cascadeUpdated: [],
+        folderPath: normalizeRelativePath(folderRelative),
+      };
+    }
+    throw new Error(`folder index already exists: ${readmeRelative}`);
+  }
+
+  fs.renameSync(sourceAbsolute, readmeAbsolute);
+
+  const previousSlug = readPageSlug(readmeAbsolute);
   index.refresh();
 
   return {
-    relativePath: normalizedFrom,
-    absolutePath: sourceAbsolute,
+    relativePath: readmeRelative,
+    absolutePath: readmeAbsolute,
     slug: previousSlug,
     previousSlug,
     slugChanged: false,
@@ -589,7 +616,13 @@ export function deleteFolder(index: DocIndex, folderPath: string): FsDeleteFolde
   }
 
   const markdownFiles = listMarkdownFilesRecursive(absolutePath);
+  const siblingRelative = siblingPageIndexRelativePath(normalized);
+  const siblingAbsolute =
+    siblingRelative === null ? null : resolveRelativeMdPath(knowledgeRoot, siblingRelative);
   const deletedSlugs = markdownFiles.map((filePath) => readPageSlug(filePath));
+  if (siblingAbsolute && fs.existsSync(siblingAbsolute)) {
+    deletedSlugs.push(readPageSlug(siblingAbsolute));
+  }
   const inboundWarnings = mergeInboundWarnings(
     deletedSlugs.map((slug) => collectInboundWarnings(index, slug)),
   );
@@ -604,6 +637,9 @@ export function deleteFolder(index: DocIndex, folderPath: string): FsDeleteFolde
   }
 
   fs.rmSync(absolutePath, { recursive: true, force: true });
+  if (siblingAbsolute && fs.existsSync(siblingAbsolute)) {
+    fs.unlinkSync(siblingAbsolute);
+  }
   index.refresh();
 
   return {

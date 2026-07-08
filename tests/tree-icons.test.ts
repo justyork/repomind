@@ -13,6 +13,8 @@ function folderNode(overrides: Partial<TreeFolderNode> = {}): TreeFolderNode {
     relativePath: 'specs',
     emoji: null,
     indexPageSlug: 'specs-readme',
+    indexPageTitle: 'Specs Readme',
+    indexPageRelativePath: 'specs/README.md',
     indexPageType: 'wiki-page',
     indexPageContentKind: 'markdown',
     children: [],
@@ -21,8 +23,22 @@ function folderNode(overrides: Partial<TreeFolderNode> = {}): TreeFolderNode {
 }
 
 describe('tree-icons', () => {
-  it('uses folder icon for catalog rows even when README index exists', () => {
+  it('uses page icon for folders with an index page', () => {
     const html = renderTreeFolderNodeIcon(folderNode());
+    expect(html).toContain('tree-icon--page');
+    expect(html).not.toContain('tree-icon--folder');
+  });
+
+  it('uses folder icon for folders without an index page', () => {
+    const html = renderTreeFolderNodeIcon(
+      folderNode({
+        indexPageSlug: null,
+        indexPageTitle: null,
+        indexPageRelativePath: null,
+        indexPageType: null,
+        indexPageContentKind: null,
+      }),
+    );
     expect(html).toContain('tree-icon--folder');
     expect(html).not.toContain('tree-icon--page');
   });

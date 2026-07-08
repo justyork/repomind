@@ -185,15 +185,15 @@ title: Other
     const result = promotePageToFolder(index, 'product/wiki/roadmap.md');
 
     expect(result.folderPath).toBe('product/wiki/roadmap');
-    expect(result.relativePath).toBe('product/wiki/roadmap.md');
+    expect(result.relativePath).toBe('product/wiki/roadmap/README.md');
     expect(result.slug).toBe('product-wiki-roadmap');
     expect(result.slugChanged).toBe(false);
     expect(result.cascadeUpdated).toEqual([]);
-    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap.md'))).toBe(true);
+    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap.md'))).toBe(false);
     expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap'))).toBe(true);
-    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap/README.md'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, 'docs/product/wiki/roadmap/README.md'))).toBe(true);
 
-    const readmeRaw = fs.readFileSync(path.join(repo, 'docs/product/wiki/roadmap.md'), 'utf8');
+    const readmeRaw = fs.readFileSync(path.join(repo, 'docs/product/wiki/roadmap/README.md'), 'utf8');
     expect(readmeRaw).toContain('slug: product-wiki-roadmap');
     expect(index.getDocBySlug('product-wiki-roadmap')).toBeTruthy();
   });
@@ -206,7 +206,9 @@ title: Other
     const index = new DocIndex(repo);
     const result = promotePageToFolder(index, 'wiki/topic.md');
     expect(result.folderPath).toBe('wiki/topic');
-    expect(fs.existsSync(path.join(repo, 'docs/wiki/topic.md'))).toBe(true);
+    expect(result.relativePath).toBe('wiki/topic/README.md');
+    expect(fs.existsSync(path.join(repo, 'docs/wiki/topic.md'))).toBe(false);
+    expect(fs.existsSync(path.join(repo, 'docs/wiki/topic/README.md'))).toBe(true);
   });
 
   it('moves a folder with Confluence sibling page and updates nested slugs', () => {

@@ -106,8 +106,6 @@ export interface TreePageNode {
   status: string;
   type: string;
   contentKind: 'markdown' | 'yaml' | 'json';
-  childFolderPath?: string;
-  children?: TreeNode[];
 }
 
 export interface TreeFolderNode {
@@ -116,6 +114,8 @@ export interface TreeFolderNode {
   relativePath: string;
   emoji: string | null;
   indexPageSlug: string | null;
+  indexPageTitle: string | null;
+  indexPageRelativePath: string | null;
   indexPageType: string | null;
   indexPageContentKind: 'markdown' | 'yaml' | 'json' | null;
   children: TreeNode[];

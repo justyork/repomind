@@ -20,17 +20,11 @@ describe('tree-page-parent', () => {
     expect(pageNeedsPromote(page('product/wiki/roadmap.md'))).toBe(true);
     expect(pageNeedsPromote(page('README.md'))).toBe(false);
     expect(pageNeedsPromote(page('product/wiki/roadmap/README.md'))).toBe(false);
-    expect(pageNeedsPromote(page('product/wiki/roadmap.md', { childFolderPath: 'product/wiki/roadmap' }))).toBe(
-      false,
-    );
   });
 
-  it('resolves create parent for folder index pages and expandable pages', () => {
+  it('resolves create parent for folder index pages and legacy sibling indexes', () => {
     expect(createParentPathForPage(page('product/wiki/roadmap/README.md'))).toBe('product/wiki/roadmap');
     expect(createParentPathForPage(page('README.md'))).toBe('');
     expect(createParentPathForPage(page('product/wiki/roadmap.md'))).toBe('product/wiki/roadmap');
-    expect(
-      createParentPathForPage(page('product/wiki/roadmap.md', { childFolderPath: 'product/wiki/roadmap' })),
-    ).toBe('product/wiki/roadmap');
   });
 });

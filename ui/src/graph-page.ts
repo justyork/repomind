@@ -1,4 +1,5 @@
 import { getGraph, getHealth, listDrafts } from './api.js';
+import { ensureAuthenticated } from './auth-gate.js';
 import { createGraphView } from './graph.js';
 import { bindThemeToggle, initTheme } from './theme.js';
 
@@ -12,6 +13,15 @@ function readSlugParam(): string | null {
 }
 
 async function main(): Promise<void> {
+  const appRoot = document.querySelector<HTMLElement>('#app');
+  if (!appRoot) {
+    return;
+  }
+  const authed = await ensureAuthenticated(appRoot);
+  if (!authed) {
+    return;
+  }
+
   bindThemeToggle(document.querySelector<HTMLButtonElement>('#theme-toggle'));
 
   const graphEl = document.querySelector<HTMLElement>('#graph')!;

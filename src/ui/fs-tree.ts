@@ -5,7 +5,7 @@ import { isKnowledgeFileName } from '../index/knowledge-file.js';
 import type { LinkEdge } from '../index/link-index.js';
 import { DOC_DOMAINS, DOMAIN_LABELS, type DocDomain } from '../index/types.js';
 import { catalogEmoji, readCatalogMeta } from './catalog-meta.js';
-import { joinRelativePath, normalizeRelativePath } from './safe-path.js';
+import { joinRelativePath, normalizeRelativePath, parentRelativePath } from './safe-path.js';
 
 const IGNORED_DIRS = new Set(['.repo-mind', '.worktrees']);
 
@@ -18,9 +18,6 @@ export interface TreePageNode {
   status: string;
   type: string;
   contentKind: 'markdown' | 'yaml' | 'json';
-  /** Sibling folder `{parent}/{name}/` when Confluence-style page+folder pair exists. */
-  childFolderPath?: string;
-  children?: TreeNode[];
 }
 
 export interface TreeFolderNode {
@@ -28,8 +25,10 @@ export interface TreeFolderNode {
   name: string;
   relativePath: string;
   emoji: string | null;
-  /** Slug of README.md index page for this folder. */
+  /** Slug of the folder index page (README.md or legacy sibling page). */
   indexPageSlug: string | null;
+  indexPageTitle: string | null;
+  indexPageRelativePath: string | null;
   indexPageType: string | null;
   indexPageContentKind: 'markdown' | 'yaml' | 'json' | null;
   children: TreeNode[];
@@ -49,25 +48,6 @@ function knowledgeFileDisplayName(fileName: string): string {
   return fileName.replace(/\.(md|ya?ml|json)$/i, '');
 }
 
-function findSiblingDirName(dirNames: string[], fileName: string): string | null {
-  const base = knowledgeFileDisplayName(fileName);
-  const exact = dirNames.find((name) => name === base);
-  if (exact) {
-    return exact;
-  }
-  const lower = base.toLowerCase();
-  return dirNames.find((name) => name.toLowerCase() === lower) ?? null;
-}
-
-function hasSiblingKnowledgePage(entries: Array<{ name: string; isDirectory: boolean }>, dirName: string): boolean {
-  return entries.some(
-    (entry) =>
-      !entry.isDirectory &&
-      isKnowledgeFileName(entry.name) &&
-      knowledgeFileDisplayName(entry.name).toLowerCase() === dirName.toLowerCase(),
-  );
-}
-
 function listDirEntries(dirPath: string): Array<{ name: string; isDirectory: boolean }> {
   if (!fs.existsSync(dirPath)) {
     return [];
@@ -81,6 +61,63 @@ function listDirEntries(dirPath: string): Array<{ name: string; isDirectory: boo
 export function readmeIndexRelativePath(folderRelativePath: string): string {
   const base = normalizeRelativePath(folderRelativePath);
   return base ? `${base}/README.md` : 'README.md';
+}
+
+/** Legacy index path: `{parent}/{folderName}.md` next to `{folderName}/`. */
+export function siblingPageIndexRelativePath(folderRelativePath: string): string | null {
+  const base = normalizeRelativePath(folderRelativePath);
+  if (!base) {
+    return null;
+  }
+  const folderName = path.basename(base);
+  return joinRelativePath(parentRelativePath(base), `${folderName}.md`);
+}
+
+interface FolderIndexMeta {
+  indexPageSlug: string | null;
+  indexPageTitle: string | null;
+  indexPageRelativePath: string | null;
+  indexPageType: string | null;
+  indexPageContentKind: 'markdown' | 'yaml' | 'json' | null;
+}
+
+function resolveFolderIndex(relativePath: string, ctx: BuildContext): FolderIndexMeta {
+  const empty: FolderIndexMeta = {
+    indexPageSlug: null,
+    indexPageTitle: null,
+    indexPageRelativePath: null,
+    indexPageType: null,
+    indexPageContentKind: null,
+  };
+
+  const readmeRel = readmeIndexRelativePath(relativePath);
+  const readmeDoc = ctx.docsByRelative.get(readmeRel);
+  if (readmeDoc) {
+    return {
+      indexPageSlug: readmeDoc.slug,
+      indexPageTitle: readmeDoc.title,
+      indexPageRelativePath: readmeRel,
+      indexPageType: readmeDoc.type,
+      indexPageContentKind: readmeDoc.contentKind,
+    };
+  }
+
+  const siblingRel = siblingPageIndexRelativePath(relativePath);
+  if (!siblingRel) {
+    return empty;
+  }
+  const siblingDoc = ctx.docsByRelative.get(siblingRel);
+  if (!siblingDoc) {
+    return empty;
+  }
+
+  return {
+    indexPageSlug: siblingDoc.slug,
+    indexPageTitle: siblingDoc.title,
+    indexPageRelativePath: siblingRel,
+    indexPageType: siblingDoc.type,
+    indexPageContentKind: siblingDoc.contentKind,
+  };
 }
 
 function isDocDomain(name: string): name is DocDomain {
@@ -102,26 +139,11 @@ export function folderDisplayName(relativePath: string): string {
 function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): TreeFolderNode {
   const entries = listDirEntries(absPath);
   const children: TreeNode[] = [];
-  const dirNames = entries.filter((entry) => entry.isDirectory).map((entry) => entry.name);
-
-  const readmeRel = readmeIndexRelativePath(relativePath);
-
-  let indexPageSlug: string | null = null;
-  let indexPageType: string | null = null;
-  let indexPageContentKind: 'markdown' | 'yaml' | 'json' | null = null;
-  const readmeDoc = ctx.docsByRelative.get(readmeRel);
-  if (readmeDoc) {
-    indexPageSlug = readmeDoc.slug;
-    indexPageType = readmeDoc.type;
-    indexPageContentKind = readmeDoc.contentKind;
-  }
+  const folderIndex = resolveFolderIndex(relativePath, ctx);
 
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (entry.isDirectory) {
       if (IGNORED_DIRS.has(entry.name)) {
-        continue;
-      }
-      if (hasSiblingKnowledgePage(entries, entry.name)) {
         continue;
       }
       const childRel = joinRelativePath(relativePath, entry.name);
@@ -134,27 +156,12 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
     }
 
     const fileRel = joinRelativePath(relativePath, entry.name);
-    const doc = ctx.docsByRelative.get(fileRel);
-    if (!doc) {
+    if (fileRel === folderIndex.indexPageRelativePath) {
       continue;
     }
 
-    const siblingDir = findSiblingDirName(dirNames, entry.name);
-    if (siblingDir) {
-      const childFolderRel = joinRelativePath(relativePath, siblingDir);
-      const nested = buildFolder(childFolderRel, path.join(absPath, siblingDir), ctx);
-      children.push({
-        kind: 'page',
-        name: knowledgeFileDisplayName(entry.name),
-        relativePath: fileRel,
-        slug: doc.slug,
-        title: doc.title,
-        status: doc.status,
-        type: doc.type,
-        contentKind: doc.contentKind,
-        childFolderPath: childFolderRel,
-        children: nested.children,
-      });
+    const doc = ctx.docsByRelative.get(fileRel);
+    if (!doc) {
       continue;
     }
 
@@ -175,9 +182,11 @@ function buildFolder(relativePath: string, absPath: string, ctx: BuildContext): 
     name: folderDisplayName(relativePath),
     relativePath,
     emoji: catalogEmoji(ctx.meta, relativePath),
-    indexPageSlug,
-    indexPageType,
-    indexPageContentKind,
+    indexPageSlug: folderIndex.indexPageSlug,
+    indexPageTitle: folderIndex.indexPageTitle,
+    indexPageRelativePath: folderIndex.indexPageRelativePath,
+    indexPageType: folderIndex.indexPageType,
+    indexPageContentKind: folderIndex.indexPageContentKind,
     children,
   };
 }
@@ -222,13 +231,10 @@ export function findTreePageSlug(
         if (child.relativePath === normalized) {
           return child.slug;
         }
-        if (child.children) {
-          const nested = search(child.children);
-          if (nested) {
-            return nested;
-          }
-        }
         continue;
+      }
+      if (child.indexPageRelativePath === normalized && child.indexPageSlug) {
+        return child.indexPageSlug;
       }
       const nested = findTreePageSlug(child, normalized);
       if (nested) {
@@ -236,6 +242,10 @@ export function findTreePageSlug(
       }
     }
     return null;
+  }
+
+  if (node.indexPageRelativePath === normalized && node.indexPageSlug) {
+    return node.indexPageSlug;
   }
 
   return search(node.children);

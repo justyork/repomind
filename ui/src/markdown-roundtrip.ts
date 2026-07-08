@@ -248,9 +248,14 @@ function blockTokenToNodes(token: Token): JSONContent[] {
         : list.ordered
           ? 'orderedList'
           : 'bulletList';
+      const attrs =
+        listType === 'orderedList' && list.start != null && list.start !== 1
+          ? { start: list.start }
+          : undefined;
       return [
         {
           type: listType,
+          ...(attrs ? { attrs } : {}),
           content: list.items.map((entry) => listItemContent(entry)),
         },
       ];
@@ -416,10 +421,12 @@ function serializeBlock(node: JSONContent): string {
       return (node.content ?? [])
         .map((item) => serializeListItem(item, '- '))
         .join('\n');
-    case 'orderedList':
+    case 'orderedList': {
+      const start = Number(node.attrs?.start ?? 1);
       return (node.content ?? [])
-        .map((item, index) => serializeListItem(item, `${index + 1}. `))
+        .map((item, index) => serializeListItem(item, `${start + index}. `))
         .join('\n');
+    }
     case 'taskList':
       return (node.content ?? []).map((item) => serializeTaskItem(item)).join('\n');
     case 'listItem':

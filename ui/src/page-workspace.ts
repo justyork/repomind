@@ -7,6 +7,7 @@ import {
 } from './api.js';
 import { catalogLabel } from './catalog.js';
 import { bindDraftSession, renderEditorActionsHtml, type DraftSessionHandle } from './draft-session.js';
+import { mountDocOutline, type DocOutlineHandle } from './doc-outline.js';
 import { renderEditorPropertiesRail } from './editor-properties.js';
 import { enhanceMermaidPreview, renderMarkdown } from './markdown.js';
 import { buildPageUrl } from './navigation.js';
@@ -18,6 +19,7 @@ import {
   renderPageShell,
 } from './page-shell.js';
 import { renderStructuredPreview } from './structured-preview.js';
+import { resetWorkspaceScroll, scheduleWorkspaceScrollReset } from './workspace-scroll.js';
 
 export interface PageWorkspaceOptions {
   docIndex: ListDocsItem[];
@@ -33,10 +35,13 @@ export interface PageWorkspaceOptions {
 }
 
 let activeSession: DraftSessionHandle | null = null;
+let activeOutline: DocOutlineHandle | null = null;
 
 export function destroyPageWorkspace(): void {
   activeSession?.destroy();
   activeSession = null;
+  activeOutline?.destroy();
+  activeOutline = null;
 }
 
 function renderReadPropertiesRail(doc: DocDetail, fm: Record<string, unknown>): string {
@@ -202,7 +207,10 @@ function renderReadMode(
     `,
     mainHtml: `
       <div class="reader-body">
-        <div id="tab-preview" class="markdown-preview reader-preview"></div>
+        <div class="reader-layout">
+          <div id="tab-preview" class="markdown-preview reader-preview"></div>
+          <nav id="doc-outline" class="doc-outline hidden" aria-label="On this page"></nav>
+        </div>
         <section id="reader-backlinks" class="reader-backlinks hidden" aria-label="Backlinks"></section>
       </div>
     `,
@@ -225,7 +233,6 @@ function renderReadMode(
         ? { docRelativePath: options.docRelativePath, slugByRelative: options.slugByRelative }
         : undefined;
     previewEl.innerHTML = renderMarkdown(doc.body ?? '', markdownContext);
-    void enhanceMermaidPreview(previewEl);
 
     previewEl.querySelectorAll<HTMLAnchorElement>('a.wikilink').forEach((link) => {
       link.addEventListener('click', (event) => {
@@ -241,6 +248,17 @@ function renderReadMode(
       link.addEventListener('click', (event) => {
         event.preventDefault();
       });
+    });
+
+    activeOutline?.destroy();
+    activeOutline = mountDocOutline({
+      scrollRoot: container,
+      contentRoot: previewEl,
+      mountEl: shell.bodySlot.querySelector<HTMLElement>('#doc-outline')!,
+    });
+    void enhanceMermaidPreview(previewEl).then(() => {
+      activeOutline?.refresh();
+      scheduleWorkspaceScrollReset(container);
     });
   }
 
@@ -307,6 +325,7 @@ function renderReadMode(
           </div>
         `;
         bindSlugNavigation(container);
+        activeOutline?.refresh();
       })
       .catch(() => {
         // optional enrichment
@@ -320,6 +339,7 @@ export function renderPageWorkspace(
   options: PageWorkspaceOptions,
 ): void {
   destroyPageWorkspace();
+  resetWorkspaceScroll(container);
 
   if (!doc || !doc.found) {
     container.className = 'workspace-main';
@@ -333,6 +353,7 @@ export function renderPageWorkspace(
   }
 
   renderReadMode(container, doc, options);
+  scheduleWorkspaceScrollReset(container);
 }
 
 export function openPageWorkspaceDraft(
@@ -341,5 +362,6 @@ export function openPageWorkspaceDraft(
   draft: Draft,
   options: PageWorkspaceOptions,
 ): void {
+  resetWorkspaceScroll(container);
   renderEditMode(container, doc, draft, options);
 }

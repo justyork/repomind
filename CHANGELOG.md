@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.7.2] - 2026-07-09
+
+### Added
+
+- **UI password auth** — optional `REPOMIND_UI_PASSWORD` protects workspace, graph, and API with session login
+- **Doc outline navigation** — Notion-like right-side heading track with hover menu in reader view
+- **`repo-mind install-skill`** — copies `repomind-docs` Cursor skill into `.cursor/skills/` (or `--global`)
+- **Workspace scroll reset** — opening another page or draft scrolls `#workspace` back to the top
+
+### Changed
+
+- **Folder index pages** — `README.md` inside a folder powers the folder row (hidden from children); legacy same-name sibling pairs still supported
+- **Promote page** — leaf promotion moves the page to `{folder}/README.md`
+- **Tree icons** — folder icon by default; page icon when the folder has a `README.md` index
+
 ## [0.7.1.1] - 2026-06-26
 
 ### Added

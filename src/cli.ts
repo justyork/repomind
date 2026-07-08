@@ -3,6 +3,7 @@ import { runAbEval } from './commands/ab-eval.js';
 import { runCheck } from './commands/check.js';
 import { runExport } from './commands/export.js';
 import { runInit } from './commands/init.js';
+import { runInstallSkill } from './commands/install-skill.js';
 import { runPrepare } from './commands/prepare.js';
 import { runPublish } from './commands/publish.js';
 import { runSetup } from './commands/setup.js';
@@ -16,6 +17,7 @@ function printHelp(): void {
 Usage:
   repo-mind init [--cwd <dir>]
   repo-mind setup [--cursor] [--claude] [--force]
+  repo-mind install-skill [--cwd <dir>] [--global] [--force]
   repo-mind check [--cwd <dir>]
   repo-mind export [--force] [--cwd <dir>]
   repo-mind prepare [--all] [--dry-run] [--cwd <dir>] [relative-path]
@@ -25,9 +27,13 @@ Usage:
   repo-mind mcp
   repo-mind ui [--port <n>] [--cwd <dir>]
 
+Environment:
+  REPOMIND_UI_PASSWORD   When set, protects the UI and API with password login
+
 Commands:
   init    Scaffold docs/ with example structured pages
   setup   Configure Cursor/Claude MCP and CLAUDE.md snippet
+  install-skill  Copy repomind-docs Cursor skill into .cursor/skills/
   check   Validate frontmatter schema and related links
   export  Write agents.md export to repo root
   prepare Add RepoMind frontmatter to markdown files (--all for batch)
@@ -78,6 +84,10 @@ function parseArgs(argv: string[]): {
     }
     if (arg === '--claude') {
       flags.claude = true;
+      continue;
+    }
+    if (arg === '--global') {
+      flags.global = true;
       continue;
     }
     if (arg === '--cwd' && rest[i + 1]) {
@@ -188,6 +198,15 @@ async function main(): Promise<void> {
           cwd,
           cursor: flags.cursor === true,
           claude: flags.claude === true,
+          force: flags.force === true,
+        }),
+      );
+      break;
+    case 'install-skill':
+      process.exit(
+        runInstallSkill({
+          cwd,
+          global: flags.global === true,
           force: flags.force === true,
         }),
       );

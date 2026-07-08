@@ -2,11 +2,13 @@
 
 - gstack is for RepoMind development workflow only; it is not part of the shipped end-user product.
 - Web UI is a core product differentiator, not a post-MVP optional extra.
-- Editing and page creation should feel Confluence-like: tree inline actions, visual WYSIWYG single canvas (not split Markdown/preview), edit then save to draft or publish from the page, page info collapsed by default.
+- Editing and page creation should feel Confluence-like: tree inline actions, visual WYSIWYG single canvas (not split Markdown/preview), read view first with edit entered only via the Edit button (not click-to-edit on the article body), edit then save to draft or publish from the page, page info collapsed by default.
+- Switching documents resets workspace scroll to the top.
+- Reader view includes Notion-like right-side heading outline navigation (vertical track, hover menu) for documents with multiple headings.
 - Publish without confirmation modal by default; optional diff via Publish menu; View markdown escape hatch in v1.
 - Knowledge graph should open as a separate page, not a split-panel view.
 - Proceed with the documented recommended implementation order when the user says to continue without re-asking for priorities.
-- UI icons use Lucide with a flat style; in the doc tree, a folder with a readable index page (`README.md`) shows a page icon, not a folder icon; editor toolbar uses the same icon set.
+- UI icons use Lucide with a flat style; in the doc tree, show a folder icon for folders without an index page, and a page icon when the folder has a `README.md` index; editor toolbar uses the same icon set.
 
 ## Learned Workspace Facts
 
@@ -16,7 +18,7 @@
 - Product roadmap in `docs/product/wiki/`; domain backlogs in `{domain}/wiki/`; eng specs in `.gstack/projects/repo-mind/specs/`; authoring taxonomy in `.cursor/skills/repomind-docs/structure.md`.
 - `.gstack/` is gitignored (local dev state via `GSTACK_HOME=.gstack` in `.env`); UI design tokens in root `DESIGN.md`.
 - Git remote: `git@github.com:justyork/repomind.git`.
-- `README.md` files are regular pages in the doc tree, not synthesized folder-index nodes; root index is `docs/README.md`.
+- Folder index pages live at `README.md` inside the folder (e.g. `docs/specs/README.md`); the README is hidden from tree children and its title/slug powers the folder row (click opens the page, chevron expands children). Root index is `docs/README.md`. Legacy same-name sibling pairs (`roadmap.md` + `roadmap/`) still work as folder indexes and are also hidden from the tree; prefer `README.md` for new folders. Promoting a leaf page moves it to `{folder}/README.md`.
 - UI routing is SPA at `/` with `?slug=` deep links; avoid path-based browser navigation outside `/`.
 - Primary dogfood target: `~/www/GAMEDEV/skyforge-caravan` (SFC).
 - npm package `@justyork/repo-mind` on registry (scoped due to npm `repomind` name conflict); CLI `repo-mind`. Current on `main`: **0.7.0.0**.

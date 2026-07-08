@@ -5,6 +5,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DocIndex } from '../index/doc-index.js';
 import { routeApi, handleDocsEvents } from './api-handlers.js';
+import type { AuthApiResponse } from './auth.js';
+import { handleAuthApi } from './auth.js';
+import type { UiAuth } from './auth.js';
 import type { DocsWatcher } from './docs-watcher.js';
 import type { DraftsDb } from './db/drafts-db.js';
 import { handleDraftApi } from './draft-api.js';
@@ -18,6 +21,7 @@ export interface UiServerOptions {
   staticDir: string;
   draftsDb?: DraftsDb;
   docsWatcher?: DocsWatcher;
+  auth?: UiAuth | null;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -62,13 +66,29 @@ function resolveStaticPath(staticDir: string, requestPath: string): string | nul
   return resolvedFile;
 }
 
-function sendJson(res: http.ServerResponse, status: number, body: unknown): void {
+function sendJson(
+  res: http.ServerResponse,
+  status: number,
+  body: unknown,
+  extraHeaders: Record<string, string> = {},
+): void {
   const payload = JSON.stringify(body);
   res.writeHead(status, {
     'Content-Type': 'application/json; charset=utf-8',
     'Content-Length': Buffer.byteLength(payload),
+    ...extraHeaders,
   });
   res.end(payload);
+}
+
+function sendAuthJson(res: http.ServerResponse, auth: UiAuth, response: AuthApiResponse): void {
+  const headers: Record<string, string> = {};
+  if (response.setCookie) {
+    headers['Set-Cookie'] = response.setCookie;
+  } else if (response.clearCookie) {
+    headers['Set-Cookie'] = auth.clearSessionCookie();
+  }
+  sendJson(res, response.status, response.body, headers);
 }
 
 function readBody(req: http.IncomingMessage): Promise<string> {
@@ -122,12 +142,65 @@ function serveStatic(
 
 export function createUiServer(options: UiServerOptions): http.Server {
   const host = options.host ?? '127.0.0.1';
-  const { staticDir, index, draftsDb, docsWatcher } = options;
+  const { staticDir, index, draftsDb, docsWatcher, auth = null } = options;
 
   return http.createServer((req, res) => {
     void (async () => {
       const method = req.method ?? 'GET';
       const urlPath = new URL(req.url ?? '/', `http://${host}`).pathname;
+
+      if (urlPath.startsWith('/api/auth/')) {
+        if (!auth) {
+          if (urlPath === '/api/auth/session' && method === 'GET') {
+            sendJson(res, 200, { authenticated: true, required: false });
+            return;
+          }
+          sendJson(res, 404, { error: 'not found' });
+          return;
+        }
+
+        let bodyRaw = '';
+        if (method === 'POST') {
+          try {
+            bodyRaw = await readBody(req);
+          } catch (error: unknown) {
+            const message = error instanceof Error ? error.message : 'bad request';
+            sendJson(res, 400, { error: message });
+            return;
+          }
+        }
+
+        const authResponse = handleAuthApi(auth, method, urlPath, bodyRaw, req.headers);
+        if (authResponse) {
+          sendAuthJson(res, auth, authResponse);
+          return;
+        }
+
+        sendJson(res, 404, { error: 'not found' });
+        return;
+      }
+
+      if (auth && !auth.isAuthenticated(req.headers)) {
+        if (urlPath.startsWith('/api/')) {
+          sendJson(res, 401, { error: 'authentication required' });
+          return;
+        }
+        if (method !== 'GET' && method !== 'HEAD') {
+          sendJson(res, 401, { error: 'authentication required' });
+          return;
+        }
+        if (method === 'HEAD') {
+          res.writeHead(401);
+          res.end();
+          return;
+        }
+        if (!serveStatic(res, staticDir, urlPath)) {
+          sendJson(res, 503, {
+            error: 'UI assets not found — run `npm run build:ui` in the repo-mind package',
+          });
+        }
+        return;
+      }
 
       if (urlPath.startsWith('/api/')) {
         if (urlPath === '/api/assets/upload' && method === 'POST') {

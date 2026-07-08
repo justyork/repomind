@@ -250,27 +250,15 @@ export function renderTreeSidebar(
   }
 
   function renderPageRow(node: TreePageNode, depth: number): HTMLElement {
-    const hasChildren = Boolean(node.childFolderPath);
-    const expandKey = node.childFolderPath ?? '';
-    const isOpen = hasChildren && expanded.has(expandKey);
     const block = document.createElement('div');
-    block.className = hasChildren ? 'tree-folder tree-page-folder' : 'tree-page';
+    block.className = 'tree-page';
     const row = document.createElement('div');
     row.className = 'tree-row';
     row.style.paddingLeft = `${depth * 12 + 8}px`;
     if (node.slug === activeSlug) {
       row.classList.add('active');
     }
-    row.innerHTML = hasChildren
-      ? `
-      <button type="button" class="tree-toggle" aria-expanded="${isOpen}">${isOpen ? '▾' : '▸'}</button>
-      <button type="button" class="tree-label">
-        ${renderTreePageIcon(node.type, node.contentKind)}
-        <span class="tree-title">${escapeHtml(node.title)}</span>
-      </button>
-      <button type="button" class="tree-menu" title="Actions">⋯</button>
-    `
-      : `
+    row.innerHTML = `
       <span class="tree-spacer" aria-hidden="true"></span>
       <button type="button" class="tree-label">
         ${renderTreePageIcon(node.type, node.contentKind)}
@@ -282,25 +270,12 @@ export function renderTreeSidebar(
       ? node.relativePath.slice(0, node.relativePath.lastIndexOf('/'))
       : '';
 
-    if (hasChildren) {
-      row.querySelector('.tree-toggle')?.addEventListener('click', (event) => {
-        event.stopPropagation();
-        if (expanded.has(expandKey)) {
-          expanded.delete(expandKey);
-        } else {
-          expanded.add(expandKey);
-        }
-        saveExpanded(expanded);
-        renderTree();
-      });
-    }
-
     row.querySelector('.tree-menu')?.addEventListener('click', (event) => {
       event.stopPropagation();
       void openMenu(event.currentTarget as HTMLElement, {
         kind: 'page',
         parentPath,
-        folderPath: node.childFolderPath ?? parentPath,
+        folderPath: parentPath,
         page: node,
         resolveCreateParent: () =>
           resolveCreateParentForPage(node, {
@@ -320,28 +295,8 @@ export function renderTreeSidebar(
     });
 
     applyTreeRowDragSource(row, 'page', node.relativePath);
-    if (node.childFolderPath) {
-      applyTreeRowDropTarget(row, node.childFolderPath);
-    }
 
     block.appendChild(row);
-
-    if (hasChildren && isOpen && node.children) {
-      const children = document.createElement('div');
-      children.className = 'tree-children';
-      if (node.childFolderPath) {
-        applyTreeChildrenDropTarget(children, node.childFolderPath);
-      }
-      for (const child of node.children) {
-        if (child.kind === 'folder') {
-          children.appendChild(renderFolder(child, depth + 1));
-        } else {
-          children.appendChild(renderPageRow(child, depth + 1));
-        }
-      }
-      block.appendChild(children);
-    }
-
     return block;
   }
 
@@ -349,14 +304,19 @@ export function renderTreeSidebar(
     const block = document.createElement('div');
     block.className = 'tree-folder';
     const isOpen = expanded.has(node.relativePath);
+    const hasIndexPage = Boolean(node.indexPageSlug);
+    const displayTitle = node.indexPageTitle ?? node.name;
     const row = document.createElement('div');
     row.className = 'tree-row';
     row.style.paddingLeft = `${depth * 12 + 8}px`;
+    if (hasIndexPage && node.indexPageSlug === activeSlug) {
+      row.classList.add('active');
+    }
     row.innerHTML = `
       <button type="button" class="tree-toggle" aria-expanded="${isOpen}">${isOpen ? '▾' : '▸'}</button>
       <button type="button" class="tree-label">
         ${renderTreeFolderNodeIcon(node)}
-        <span class="tree-title">${escapeHtml(node.name)}</span>
+        <span class="tree-title">${escapeHtml(displayTitle)}</span>
       </button>
       <button type="button" class="tree-menu" title="Actions">⋯</button>
     `;
@@ -373,6 +333,14 @@ export function renderTreeSidebar(
     });
 
     row.querySelector('.tree-label')?.addEventListener('click', () => {
+      if (hasIndexPage && node.indexPageSlug) {
+        activeSlug = node.indexPageSlug;
+        activeDraftId = null;
+        renderTree();
+        renderDrafts();
+        callbacks.onSelectSlug(node.indexPageSlug);
+        return;
+      }
       if (expanded.has(node.relativePath)) {
         expanded.delete(node.relativePath);
       } else {
@@ -493,6 +461,8 @@ export function renderTreeSidebar(
     tree.children = nextTree.children ?? [];
     tree.emoji = nextTree.emoji;
     tree.indexPageSlug = nextTree.indexPageSlug;
+    tree.indexPageTitle = nextTree.indexPageTitle;
+    tree.indexPageRelativePath = nextTree.indexPageRelativePath;
     tree.indexPageType = nextTree.indexPageType;
     tree.indexPageContentKind = nextTree.indexPageContentKind;
     tree.name = nextTree.name;
