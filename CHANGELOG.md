@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.8.1] - 2026-07-09
+
+### Added
+
+- **ROADMAP.md** — informal ideas backlog (AI assistant, semantic search, UX improvements)
+
+### Fixed
+
+- **Full-width content** — reader and editor use available workspace width instead of a fixed ~72ch column
+- **Doc outline hover** — invisible bridge between heading track and popup menu so the menu stays open when moving the cursor
+
 ## [0.8.0] - 2026-07-09
 
 ### Added

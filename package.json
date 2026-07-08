@@ -1,6 +1,6 @@
 {
   "name": "@justyork/repo-mind",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Unified docs/ workspace for humans (UI) and AI agents (MCP) — Confluence in your repo",
   "type": "module",
   "bin": {
