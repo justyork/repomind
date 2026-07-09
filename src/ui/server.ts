@@ -4,7 +4,7 @@ import type { Socket } from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { DocIndex } from '../index/doc-index.js';
-import { routeApi, handleDocsEvents } from './api-handlers.js';
+import { routeApi, handleDocsEvents, handleAskApi } from './api-handlers.js';
 import type { AuthApiResponse } from './auth.js';
 import { handleAuthApi } from './auth.js';
 import type { UiAuth } from './auth.js';
@@ -256,6 +256,12 @@ export function createUiServer(options: UiServerOptions): http.Server {
         const draftResponse = handleDraftApi(index, draftsDb, method, urlPath, bodyRaw);
         if (draftResponse) {
           sendJson(res, draftResponse.status, draftResponse.body);
+          return;
+        }
+
+        const askResponse = await handleAskApi(index, method, urlPath, bodyRaw);
+        if (askResponse) {
+          sendJson(res, askResponse.status, askResponse.body);
           return;
         }
 

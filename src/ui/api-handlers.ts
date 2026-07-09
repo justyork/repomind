@@ -21,6 +21,9 @@ import { buildDocsTree } from './fs-tree.js';
 import { readCatalogMeta } from './catalog-meta.js';
 import { computeKnowledgeStats } from './stats.js';
 import { listPageTemplates } from './templates.js';
+import { askDocs } from '../ask/ask.js';
+import { getAskServerConfig } from '../ask/config.js';
+import type { AskChatTurn, LlmProvider } from '../ask/types.js';
 
 export interface ApiResponse {
   status: number;
@@ -29,6 +32,97 @@ export interface ApiResponse {
 
 function jsonError(status: number, message: string): ApiResponse {
   return { status, body: { error: message } };
+}
+
+function parseJsonBody(raw: string): Record<string, unknown> | null {
+  if (!raw.trim()) {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function isLlmProvider(value: string): value is LlmProvider {
+  return value === 'openai' || value === 'anthropic';
+}
+
+export async function handleAskApi(
+  index: DocIndex,
+  method: string,
+  pathname: string,
+  bodyRaw: string,
+): Promise<ApiResponse | null> {
+  if (pathname !== '/api/ask' || method !== 'POST') {
+    return null;
+  }
+
+  const body = parseJsonBody(bodyRaw);
+  if (!body) {
+    return jsonError(400, 'invalid JSON body');
+  }
+
+  const question = typeof body.question === 'string' ? body.question : '';
+  const providerRaw = typeof body.provider === 'string' ? body.provider : undefined;
+  if (providerRaw && !isLlmProvider(providerRaw)) {
+    return jsonError(400, 'invalid provider — use openai or anthropic');
+  }
+  const provider = providerRaw && isLlmProvider(providerRaw) ? providerRaw : undefined;
+
+  const model = typeof body.model === 'string' ? body.model : undefined;
+  const apiKey = typeof body.apiKey === 'string' ? body.apiKey : undefined;
+  const history = parseAskHistory(body.history);
+
+  try {
+    const result = await askDocs(index, {
+      question,
+      provider,
+      model,
+      apiKey,
+      history,
+    });
+    return { status: 200, body: result };
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'ask failed';
+    if (message.includes('API key is required')) {
+      return jsonError(400, message);
+    }
+    if (message.includes('question is required')) {
+      return jsonError(400, message);
+    }
+    return jsonError(502, message);
+  }
+}
+
+function parseAskHistory(value: unknown): AskChatTurn[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const turns = value
+    .map((item) => {
+      if (typeof item !== 'object' || item === null) {
+        return null;
+      }
+      const role = (item as { role?: unknown }).role;
+      const content = (item as { content?: unknown }).content;
+      if ((role !== 'user' && role !== 'assistant') || typeof content !== 'string') {
+        return null;
+      }
+      const trimmed = content.trim();
+      if (!trimmed) {
+        return null;
+      }
+      return { role, content: trimmed };
+    })
+    .filter((item): item is AskChatTurn => item !== null);
+
+  return turns.length > 0 ? turns : undefined;
 }
 
 function parseRequestUrl(req: IncomingMessage, baseUrl: string): URL {
@@ -42,6 +136,10 @@ export function handleApiRequest(
   pathname: string,
   searchParams: URLSearchParams,
 ): ApiResponse {
+  if (pathname === '/api/ask/config') {
+    return { status: 200, body: getAskServerConfig() };
+  }
+
   if (pathname === '/api/health') {
     const docs = index.refresh();
     return {

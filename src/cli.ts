@@ -29,13 +29,18 @@ Usage:
 
 Environment:
   REPOMIND_UI_PASSWORD   When set, protects the UI and API with password login
+  REPOMIND_ASK_API_KEY   Optional default API key for the Ask assistant (BYOK)
+  REPOMIND_ASK_PROVIDER  Ask LLM provider: openai (default) or anthropic
+  REPOMIND_ASK_MODEL     Ask LLM model override
+
+  repo-mind ui loads REPOMIND_* variables from <cwd>/.env (does not override shell env).
 
 Commands:
   init    Scaffold docs/ with example structured pages
   setup   Configure Cursor/Claude MCP and CLAUDE.md snippet
   install-skill  Copy repomind-docs Cursor skill into .cursor/skills/
   check   Validate frontmatter schema and related links
-  export  Write agents.md export to repo root
+  export  Write agents-export.md flat dump to repo root
   prepare Add RepoMind frontmatter to markdown files (--all for batch)
   sync-links Convert markdown links to wikilinks and sync related frontmatter
   publish   Publish active drafts to docs/; --pr opens a GitHub pull request

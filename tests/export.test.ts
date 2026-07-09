@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { runExport } from '../src/commands/export.ts';
+import { EXPORT_FILENAME, runExport } from '../src/commands/export.ts';
 import { runInit } from '../src/commands/init.ts';
 
 const tmpRoots: string[] = [];
@@ -20,12 +20,12 @@ afterEach(() => {
 });
 
 describe('export', () => {
-  it('writes agents.md with per-type sections', () => {
+  it('writes agents-export.md with per-type sections', () => {
     const repo = makeTempDir();
     runInit({ cwd: repo });
     expect(runExport({ cwd: repo })).toBe(0);
 
-    const output = fs.readFileSync(path.join(repo, 'agents.md'), 'utf8');
+    const output = fs.readFileSync(path.join(repo, EXPORT_FILENAME), 'utf8');
     expect(output).toContain('## ADRs');
     expect(output).toContain('## Glossary');
     expect(output).toContain('slug: mcp');

@@ -16,7 +16,7 @@ export function renderDashboard(
     <div class="dashboard-header">
       <h1 class="doc-title">Health &amp; publish</h1>
       <div class="workspace-actions">
-        <button type="button" id="dash-export" class="btn-ghost">Export agents.md</button>
+        <button type="button" id="dash-export" class="btn-ghost">Export agents-export.md</button>
         <button type="button" id="dash-refresh" class="btn-ghost">Refresh</button>
       </div>
     </div>

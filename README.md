@@ -45,7 +45,7 @@ Then ask your agent a project question — it should call `search_docs` / `get_d
 | `repo-mind check` | Validate frontmatter schema and `related:` links |
 | `repo-mind prepare` | Add frontmatter to legacy markdown (`--all` for batch) |
 | `repo-mind sync-links` | Convert markdown links to wikilinks; sync `related:` |
-| `repo-mind export` | Write `agents.md` to repo root |
+| `repo-mind export` | Write `agents-export.md` flat dump to repo root |
 | `repo-mind publish` | Publish active drafts to `docs/`; `--pr` opens a GitHub pull request |
 | `repo-mind mcp` | Start the MCP stdio server |
 | `repo-mind ui` | Confluence-style workspace over `docs/` (127.0.0.1:3847) |
@@ -64,16 +64,43 @@ Confluence-style workspace over **`docs/`**:
 npm run build
 repo-mind ui              # http://127.0.0.1:3847
 repo-mind ui --port 4000 --cwd /path/to/project
+
+# Local development (uses this repo's dist/, includes latest .env loader):
+npm run ui
+node dist/cli.js ui
 ```
+
+`repo-mind ui` loads `REPOMIND_*` variables from the nearest `.env` (starting at cwd and the docs project root). If you installed `@justyork/repo-mind` globally, run `npm link` in this repo after `npm run build` so `repo-mind ui` uses the local build.
 
 - **Catalog tree** — docs by domain (`Product`, `Technical`, …) and type
 - **Prepare** — recursively find markdown without frontmatter; add schema in one click
 - **Drafts + Publish** — SQLite drafts, publish to `docs/*.md`
-- **Health** — schema check, publish queue, export `agents.md`
+- **Health** — schema check, publish queue, export `agents-export.md`
 - **Graph** — full-page view at `/graph.html`
+- **Ask** — documentation assistant (BYOK): floating chat button, natural-language Q&A with source links
 - **Theme** — light (default) / dark toggle
 
 Binds **127.0.0.1** only. MCP reads published files in `docs/` only (not SQLite drafts).
+
+### Ask assistant (BYOK)
+
+Click the **chat icon** in the bottom-right corner to open the documentation assistant. Answers are grounded in published `docs/` via the same retrieval path as MCP (`search_docs` → `get_doc`). Each answer includes links to source pages (`?slug=`).
+
+Configure your provider API key in **Ask → Settings** (stored in browser `localStorage` only) or set a team default:
+
+Or set a team default in project `.env` (loaded automatically by `repo-mind ui`):
+
+```bash
+REPOMIND_ASK_API_KEY=sk-...
+REPOMIND_ASK_PROVIDER=openai
+REPOMIND_UI_PASSWORD=your-password
+```
+
+| Variable | Description |
+|----------|-------------|
+| `REPOMIND_ASK_API_KEY` | Optional server default API key |
+| `REPOMIND_ASK_PROVIDER` | `openai` (default) or `anthropic` |
+| `REPOMIND_ASK_MODEL` | Override model (default: `gpt-4o-mini` / `claude-3-5-haiku-latest`) |
 
 ## MCP tools
 

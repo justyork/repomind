@@ -20,3 +20,5 @@ ab-demo/results/*-blind.md
 # Environment
 .env
 .env.local
+.cursor
+!.cursor/skills/

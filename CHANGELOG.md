@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [0.9.0] - 2026-07-09
+
+### Added
+
+- **Ask assistant (BYOK)** — floating chat panel in Web UI; `POST /api/ask` answers from published `docs/` with source citations (OpenAI / Anthropic)
+- **`.env` loader** — `repo-mind ui` loads `REPOMIND_*` from project `.env` (server-side; API keys never sent to the browser)
+- **Theme boot script** — applies saved light/dark theme before first paint (no flash on reload)
+- **`npm run ui`** — local dev shortcut for `repo-mind ui`
+
+### Changed
+
+- **Export output** — `repo-mind export` writes `agents-export.md` instead of `agents.md` (avoids clobbering Cursor `AGENTS.md` on case-insensitive filesystems)
+
+### Fixed
+
+- **Ask UX** — greetings and vague queries get helpful suggestions instead of a bare "not found"
+
 ## [0.8.1] - 2026-07-09
 
 ### Added

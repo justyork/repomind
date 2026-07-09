@@ -33,6 +33,7 @@ import {
   writeSlugToUrl,
 } from './navigation.js';
 import { ensureAuthenticated } from './auth-gate.js';
+import { initAskPanel } from './ask-panel.js';
 
 normalizeAppUrl();
 initTheme();
@@ -349,6 +350,12 @@ async function main(): Promise<void> {
       showToast(err instanceof Error ? err.message : 'Failed to load doc', true);
     }
   }
+
+  initAskPanel({
+    onOpenSlug: (slug) => {
+      void selectSlug(slug);
+    },
+  });
 
   workspaceEl.addEventListener('navigate-slug', ((event: CustomEvent<{ slug: string }>) => {
     void selectSlug(event.detail.slug);

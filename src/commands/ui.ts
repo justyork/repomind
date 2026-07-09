@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
+import { loadRepomindEnv } from '../env/load-repomind-env.js';
 import { closeAllDocsEventStreams } from '../ui/api-handlers.js';
 import { DocsWatcher } from '../ui/docs-watcher.js';
 import { openDraftsDb } from '../ui/db/drafts-db.js';
@@ -20,6 +21,14 @@ export async function runUi(options: UiCommandOptions = {}): Promise<number> {
   if (!index.getKnowledgeRoot()) {
     console.error('no docs/ found — run `repo-mind init` or create a docs/ directory');
     return 1;
+  }
+
+  const projectRoot = path.dirname(index.getKnowledgeRoot()!);
+  const envLoad = loadRepomindEnv(cwd, projectRoot);
+  if (envLoad.loaded.length > 0 && envLoad.envPath) {
+    console.log(
+      `loaded ${envLoad.loaded.length} REPOMIND_* variable(s) from ${envLoad.envPath}`,
+    );
   }
 
   const staticDir = resolveUiStaticDir();

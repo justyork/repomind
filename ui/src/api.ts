@@ -14,6 +14,35 @@ export interface SearchResult {
   score: number;
 }
 
+export interface AskSource {
+  slug: string;
+  title: string;
+  excerpt: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  sources: AskSource[];
+  notFound: boolean;
+}
+
+export interface AskRequestSettings {
+  provider?: 'openai' | 'anthropic';
+  model?: string;
+  apiKey?: string;
+}
+
+export interface AskChatTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AskServerConfig {
+  serverConfigured: boolean;
+  provider: 'openai' | 'anthropic';
+  model: string;
+}
+
 export interface GraphNode {
   slug: string;
   type: string;
@@ -73,6 +102,35 @@ export function searchDocs(q: string, type?: string): Promise<{ results: SearchR
     params.set('type', type);
   }
   return fetchJson(`/api/search?${params}`);
+}
+
+export function getAskConfig(): Promise<AskServerConfig> {
+  return fetchJson('/api/ask/config');
+}
+
+export function postAsk(
+  question: string,
+  settings: AskRequestSettings = {},
+  history: AskChatTurn[] = [],
+): Promise<AskResponse> {
+  const body: Record<string, unknown> = {
+    question,
+    history,
+  };
+  if (settings.provider) {
+    body.provider = settings.provider;
+  }
+  if (settings.model) {
+    body.model = settings.model;
+  }
+  if (settings.apiKey?.trim()) {
+    body.apiKey = settings.apiKey.trim();
+  }
+  return fetchJson('/api/ask', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
 }
 
 export function getGraph(slug: string, depth?: number): Promise<GraphData> {

@@ -1,6 +1,6 @@
 import type { IncomingMessage } from 'node:http';
 import type { DocIndex } from '../index/doc-index.js';
-import { runExport } from '../commands/export.js';
+import { EXPORT_FILENAME, runExport } from '../commands/export.js';
 import { isValidSlug } from '../index/slug.js';
 import { DOC_TYPES, isDocStatus, isDocType } from '../index/types.js';
 import { writeCatalogEmoji, readCatalogMeta } from './catalog-meta.js';
@@ -56,7 +56,7 @@ export function handleDraftApi(
     if (code !== 0) {
       return jsonError(500, 'export failed');
     }
-    return { status: 200, body: { ok: true, path: 'agents.md' } };
+    return { status: 200, body: { ok: true, path: EXPORT_FILENAME } };
   }
 
   if (pathname === '/api/catalog-meta' && method === 'PUT') {

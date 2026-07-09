@@ -3,6 +3,9 @@ import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
 import { DOC_TYPES, TYPE_TO_DIR, type DocFrontmatter, type DocType } from '../index/types.js';
 
+/** Generated flat export — distinct from Cursor's `AGENTS.md` (case-insensitive FS clash). */
+export const EXPORT_FILENAME = 'agents-export.md';
+
 const TYPE_SECTIONS: Record<DocType, string> = {
   adr: 'ADRs',
   'feature-spec': 'Feature Specs',
@@ -28,10 +31,10 @@ export function runExport(options: ExportOptions = {}): number {
   }
 
   const repoRoot = path.dirname(knowledgeRoot);
-  const outputPath = path.join(repoRoot, 'agents.md');
+  const outputPath = path.join(repoRoot, EXPORT_FILENAME);
 
   if (fs.existsSync(outputPath) && !options.force) {
-    console.error('agents.md already exists — pass --force to overwrite');
+    console.error(`${EXPORT_FILENAME} already exists — pass --force to overwrite`);
     return 1;
   }
 
@@ -88,9 +91,9 @@ export function resolveExportPath(cwd: string): string {
   const index = new DocIndex(cwd);
   const knowledgeRoot = index.getKnowledgeRoot();
   if (!knowledgeRoot) {
-    return path.join(cwd, 'agents.md');
+    return path.join(cwd, EXPORT_FILENAME);
   }
-  return path.join(path.dirname(knowledgeRoot), 'agents.md');
+  return path.join(path.dirname(knowledgeRoot), EXPORT_FILENAME);
 }
 
 export function typeDirFor(type: DocType): string {
