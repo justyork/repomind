@@ -17,6 +17,11 @@ All notable changes to this project are documented in this file.
 - **`repo-mind mcp`** — `--cwd <dir>` and `REPOMIND_ROOT` select the project
 - **A/B harness** — repomind arm uses MCP defaults (limit 5, section hints, outline/backlinks), records `anchorFound` and `toolCalls`; token schema is built from the real tool definitions; `ab-demo/skyforge-questions.json` rewritten for the current skyforge docs (10 Russian questions); corpus gained two realistic-size pages (economy-system, release-process) and three questions
 
+### Added
+
+- **Semantic search (optional)** — local multilingual embeddings (`@huggingface/transformers`, `Xenova/multilingual-e5-small`) blended with BM25 via reciprocal-rank fusion; section-level vectors cached in `docs/.repo-mind/embeddings/`; `repo-mind embed`; background build in `repo-mind mcp`; `REPOMIND_EMBEDDINGS=off`, `REPOMIND_EMBEDDING_MODEL`; hits found only by meaning report `matchMode: "semantic"`
+- **`ab-eval`** — records `searchMode` (`lexical` | `hybrid`) and builds the vector index first when available
+
 ### Fixed
 
 - **A/B baseline** — grep terms were Latin-only, so Russian prompts made the baseline read the whole corpus; it now greps stemmed roots, opens the top 3 files and records `anchorRead`. Live-eval excerpts use the best-matching section for both arms and overhead is split per question

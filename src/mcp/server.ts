@@ -8,6 +8,7 @@ import {
   ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getAgentWriteGate } from '../agent-write-gate.js';
+import { prepareSemantic } from '../embeddings/prepare.js';
 import { DocIndex } from '../index/doc-index.js';
 import { DOC_DOMAINS, DOC_STATUSES, DOC_TYPES } from '../index/types.js';
 import { getPackageVersion } from '../package-version.js';
@@ -89,7 +90,7 @@ function firstFailure(...parsed: Array<Parsed<unknown>>): ToolFailure | null {
   return null;
 }
 
-function callTool(index: DocIndex, cwd: string, name: string, args: Record<string, unknown>) {
+async function callTool(index: DocIndex, cwd: string, name: string, args: Record<string, unknown>) {
   if (!isToolName(name)) {
     return toolError({ code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` });
   }
@@ -127,6 +128,12 @@ function callTool(index: DocIndex, cwd: string, name: string, args: Record<strin
       const domain = optionalEnum(args, 'domain', DOC_DOMAINS);
       const failure = firstFailure(type, status, domain);
       if (failure) return toolError(failure);
+      try {
+        // Embeds the query so the sync search below can blend in semantic hits.
+        await index.semantic?.prepare(str(args, 'query'));
+      } catch (error) {
+        console.error(`repo-mind: semantic search skipped (${error instanceof Error ? error.message : String(error)})`);
+      }
       return toolResult(
         searchDocs(index, {
           query: str(args, 'query'),
@@ -232,7 +239,8 @@ export interface McpServerOptions {
 
 export async function startMcpServer(options: McpServerOptions = {}): Promise<void> {
   const cwd = options.cwd ?? process.env.REPOMIND_ROOT ?? process.cwd();
-  const server = createMcpServer(new DocIndex(cwd), cwd);
+  const index = new DocIndex(cwd);
+  const server = createMcpServer(index, cwd);
 
   let acceptingCalls = true;
   const shutdown = async () => {
@@ -253,4 +261,12 @@ export async function startMcpServer(options: McpServerOptions = {}): Promise<vo
   });
 
   await server.connect(new StdioServerTransport());
+
+  // Build the vector index in the background; until it is ready, search stays lexical.
+  void prepareSemantic(index, {
+    attach: true,
+    log: (message) => console.error(`repo-mind: ${message}`),
+  }).catch((error: unknown) => {
+    console.error(`repo-mind: semantic indexing failed (${error instanceof Error ? error.message : String(error)})`);
+  });
 }

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { runAbEval } from './commands/ab-eval.js';
+import { runAbEvalWithSemantic } from './commands/ab-eval.js';
+import { runEmbed } from './commands/embed.js';
 import { runCheck } from './commands/check.js';
 import { runExport } from './commands/export.js';
 import { runInit } from './commands/init.js';
@@ -24,10 +25,12 @@ Usage:
   repo-mind sync-links [--dry-run] [--no-convert-body] [--no-sync-related] [--cwd <dir>]
   repo-mind publish [--pr] [--dry-run] [--draft <id>] [--message <text>] [--title <text>] [--body <text>] [--cwd <dir>]
   repo-mind ab-eval --cwd <dir> [--questions <path>] [--output <path>] [--dry-run]
+  repo-mind embed [--force] [--cwd <dir>]
   repo-mind mcp [--cwd <dir>]
   repo-mind ui [--port <n>] [--cwd <dir>]
 
 Environment:
+  REPOMIND_EMBEDDINGS    Set to "off" to disable semantic (embedding) search
   REPOMIND_ROOT          Project directory for the mcp command when --cwd is not given
   REPOMIND_UI_PASSWORD   When set, protects the UI and API with password login
   REPOMIND_ASK_API_KEY   Optional default API key for the Ask assistant (BYOK)
@@ -46,6 +49,7 @@ Commands:
   sync-links Convert markdown links to wikilinks and sync related frontmatter
   publish   Publish active drafts to docs/; --pr opens a GitHub pull request
   ab-eval   Live A/B eval on a project docs/ corpus (skyforge dogfood gate)
+  embed   Build the local embedding cache for semantic search (needs @huggingface/transformers)
   mcp     Start the MCP stdio server
   ui      Confluence-style workspace over docs/ (127.0.0.1)
 `);
@@ -245,7 +249,7 @@ async function main(): Promise<void> {
       break;
     case 'ab-eval':
       process.exit(
-        runAbEval({
+        await runAbEvalWithSemantic({
           cwd,
           questions: typeof flags.questions === 'string' ? flags.questions : undefined,
           output: typeof flags.output === 'string' ? flags.output : undefined,
@@ -280,6 +284,9 @@ async function main(): Promise<void> {
           skipPush: process.env.REPOMIND_PUBLISH_SKIP_REMOTE === '1',
         }),
       );
+      break;
+    case 'embed':
+      process.exit(await runEmbed({ cwd, force: flags.force === true }));
       break;
     case 'mcp':
       await startMcpServer({ cwd });

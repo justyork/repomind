@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import fg from 'fast-glob';
 import matter from 'gray-matter';
+import type { SemanticLookup } from '../embeddings/types.js';
 import { contentKindFromRelativePath } from './knowledge-file.js';
 import { inferTypeFromRelative, resolveDomain } from './path-inference.js';
 import { isValidSlug, slugFromRelativePath } from './slug.js';
@@ -197,6 +198,9 @@ export function listMarkdownFiles(knowledgeRoot: string): string[] {
 }
 
 export class DocIndex {
+  /** Optional vector index; when set (and a query was prepared), search blends it with BM25. */
+  semantic: SemanticLookup | null = null;
+
   private readonly startDir: string;
   private knowledgeRoot: string | null;
   private readonly cache = new Map<string, CacheEntry>();

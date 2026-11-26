@@ -1,3 +1,7 @@
+import { DocIndex } from '../index/doc-index.js';
+import { prepareSemantic } from '../embeddings/prepare.js';
+import type { SemanticLookup } from '../embeddings/types.js';
+import { loadQuestions } from '../ab-demo/load-questions.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mergeHumanScores, runLiveEval } from '../ab-demo/live-eval.js';
@@ -14,6 +18,8 @@ export interface AbEvalOptions {
   scoresFile?: string;
   baselineTranscript?: string;
   repomindTranscript?: string;
+  /** Prepared vector index for hybrid search in the repomind arm. */
+  semantic?: SemanticLookup | null;
 }
 
 function printUsage(): void {
@@ -114,10 +120,32 @@ export function runAbEval(options: AbEvalOptions = {}): number {
       dryRun: options.dryRun,
       baselineTranscript: options.baselineTranscript,
       repomindTranscript: options.repomindTranscript,
+      semantic: options.semantic,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(message);
+    return 1;
+  }
+}
+
+/** Like runAbEval, but first builds the vector index so the repomind arm searches hybrid when possible. */
+export async function runAbEvalWithSemantic(options: AbEvalOptions = {}): Promise<number> {
+  if (options.recordScores || !options.cwd || options.dryRun) {
+    return runAbEval(options);
+  }
+  try {
+    const abRoot = resolveAbDemoRoot(options.cwd);
+    const questionsFile = options.questions ?? defaultSkyforgeQuestionsPath(abRoot);
+    const prompts = loadQuestions(questionsFile).questions.map((question) => question.prompt);
+    const prepared = await prepareSemantic(new DocIndex(options.cwd), {
+      queries: prompts,
+      log: (message) => console.error(`ab-eval: ${message}`),
+    });
+    console.log(prepared ? 'search mode: hybrid (BM25 + embeddings)' : 'search mode: lexical (BM25 only)');
+    return runAbEval({ ...options, semantic: prepared?.semantic ?? null });
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
     return 1;
   }
 }

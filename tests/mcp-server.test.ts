@@ -4,8 +4,10 @@ import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { afterEach, describe, expect, it } from 'vitest';
+import { SemanticIndex } from '../src/embeddings/semantic-index.ts';
 import { DocIndex } from '../src/index/doc-index.ts';
 import { createMcpServer } from '../src/mcp/server.ts';
+import { createFakeEmbedder } from './helpers/fake-embedder.ts';
 
 const tmpRoots: string[] = [];
 
@@ -117,6 +119,31 @@ describe('mcp server', () => {
     expect(templates.resourceTemplates[0]?.uriTemplate).toBe('repomind://doc/{slug}');
     const read = await client.readResource({ uri: 'repomind://doc/choice' });
     expect((read.contents[0] as { text: string }).text).toContain('We chose sqlite.');
+  });
+
+  it('blends semantic hits into search_docs and survives a failing embedder', async () => {
+    const repo = makeRepo(true);
+    const index = new DocIndex(repo);
+    const semantic = new SemanticIndex(index, createFakeEmbedder());
+    await semantic.sync();
+    index.semantic = semantic;
+    const server = createMcpServer(index, repo);
+    const client = new Client({ name: 'test', version: '0.0.0' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([server.connect(a), client.connect(b)]);
+
+    const hits = parse(await client.callTool({ name: 'search_docs', arguments: { query: 'знания в базе данных' } }));
+    expect(hits[0].slug).toBe('choice');
+    expect(hits[0].matchMode).toBe('semantic');
+
+    index.semantic = {
+      prepare: async () => {
+        throw new Error('model crashed');
+      },
+      lookup: () => null,
+    };
+    const lexical = parse(await client.callTool({ name: 'search_docs', arguments: { query: 'sqlite' } }));
+    expect(lexical[0].slug).toBe('choice');
   });
 
   it('answers search_docs end to end', async () => {

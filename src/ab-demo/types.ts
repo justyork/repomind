@@ -109,6 +109,8 @@ export interface LiveQuestionResult {
 
 export interface LiveEvalResult {
   runAt: string;
+  /** How search_docs ranked: BM25 only, or BM25 blended with the vector index. */
+  searchMode?: 'lexical' | 'hybrid';
   evalKind: 'live';
   corpusCwd: string;
   questionsFile: string;

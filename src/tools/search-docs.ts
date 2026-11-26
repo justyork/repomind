@@ -1,3 +1,4 @@
+import type { SemanticHit } from '../embeddings/types.js';
 import type { DocIndex } from '../index/doc-index.js';
 import type { DocDomain, DocRecord, DocStatus, DocType } from '../index/types.js';
 import {
@@ -22,6 +23,17 @@ export const DEFAULT_TOP_CHARS = 1200;
 
 const BM25_K1 = 1.2;
 const BM25_B = 0.75;
+/** Small k keeps a #1 hit in either list worth much more than a mid-table hit in both. */
+const RRF_K = 10;
+/** After fusion a stale status only breaks near-ties; the hit still carries its status for the agent to judge. */
+const FUSED_STATUS_MULTIPLIER: Record<DocStatus, number> = {
+  accepted: 1,
+  proposed: 1,
+  draft: 0.97,
+  superseded: 0.95,
+};
+/** A semantic section hint wins over the lexical one when the page ranks this high semantically. */
+const SEMANTIC_SECTION_RANK = 5;
 const TITLE_WEIGHT = 3;
 const TAG_WEIGHT = 3;
 const STATUS_MULTIPLIER: Record<DocStatus, number> = {
@@ -57,7 +69,7 @@ export interface SearchDocsResult {
   /** Best section text, only on the first hit and only when includeTop is set. */
   top?: { section?: string; text: string };
   /** `all`: every query term matched; `any`: relaxed fallback (some terms matched). */
-  matchMode?: 'all' | 'any';
+  matchMode?: 'all' | 'any' | 'semantic';
 }
 
 interface WordStats {
@@ -206,6 +218,48 @@ function pickBestSection(doc: DocRecord, terms: string[]): SectionPick | null {
   return bestScore > 0 ? best : null;
 }
 
+interface Ranked {
+  indexed: IndexedDoc;
+  score: number;
+  /** Query terms matched lexically (0 = found only by meaning). */
+  matched: number;
+  semantic?: SemanticHit;
+  semanticRank?: number;
+}
+
+/** Reciprocal-rank fusion of the BM25 ordering and the vector ordering. */
+function fuseRankings(scored: Scored[], semanticHits: SemanticHit[], candidates: IndexedDoc[]): Ranked[] {
+  const bySlug = new Map(candidates.map((candidate) => [candidate.doc.slug, candidate]));
+  const entries = new Map<string, Ranked>();
+  scored.forEach((entry, rank) => {
+    entries.set(entry.indexed.doc.slug, {
+      indexed: entry.indexed,
+      score: 1 / (RRF_K + rank + 1),
+      matched: entry.matched,
+    });
+  });
+  let semanticRank = 0;
+  for (const hit of semanticHits) {
+    const indexed = bySlug.get(hit.slug);
+    if (!indexed) continue; // removed by type/domain/status filters
+    const entry = entries.get(hit.slug) ?? { indexed, score: 0, matched: 0 };
+    entry.score += 1 / (RRF_K + semanticRank + 1);
+    entry.semantic = hit;
+    entry.semanticRank = semanticRank;
+    entries.set(hit.slug, entry);
+    semanticRank += 1;
+  }
+  for (const entry of entries.values()) {
+    entry.score *= FUSED_STATUS_MULTIPLIER[entry.indexed.doc.status];
+  }
+  return [...entries.values()];
+}
+
+function sectionText(doc: DocRecord, heading: string): string | undefined {
+  if (doc.contentKind !== 'markdown') return undefined;
+  return splitFlatSections(doc.body, parseHeadings(doc.body)).find((section) => section.heading === heading)?.text;
+}
+
 export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsResult[] {
   if (!index.getKnowledgeRoot()) {
     return [];
@@ -235,8 +289,11 @@ export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsR
     return words.length > 0 && words.every((word) => queryStems.some((stem) => stemsCompatible(word, stem)));
   };
   const queryLower = input.query.trim().toLowerCase();
+  // With a vector index the status penalty is applied once, after fusion.
+  const semanticHits = index.semantic?.lookup(input.query) ?? null;
+  const fused = semanticHits !== null && semanticHits.length > 0;
   const boosts = (doc: DocRecord): number => {
-    let multiplier = STATUS_MULTIPLIER[doc.status];
+    let multiplier = fused ? 1 : STATUS_MULTIPLIER[doc.status];
     multiplier *= 1 + 0.1 * Math.min(inbound.get(doc.slug) ?? 0, 5);
     if (doc.slug === queryKebab || doc.title.toLowerCase() === queryLower) {
       multiplier *= 2;
@@ -254,27 +311,37 @@ export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsR
 
   scored.sort((a, b) => b.score - a.score || a.indexed.doc.slug.localeCompare(b.indexed.doc.slug));
 
+  const ranked: Ranked[] = fused
+    ? fuseRankings(scored, semanticHits, candidates)
+    : scored.map((entry) => ({ ...entry }));
+  ranked.sort((a, b) => b.score - a.score || a.indexed.doc.slug.localeCompare(b.indexed.doc.slug));
+
   const topChars = input.topChars ?? DEFAULT_TOP_CHARS;
-  return scored.slice(0, clampLimit(input.limit)).map(({ indexed, score, matched }, rank) => {
-    const { doc } = indexed;
-    const pick = pickBestSection(doc, usedTerms);
-    const section = pick?.heading ?? undefined;
+  return ranked.slice(0, clampLimit(input.limit)).map((entry, rank) => {
+    const { doc } = entry.indexed;
+    const lexicalPick = entry.matched > 0 ? pickBestSection(doc, usedTerms) : null;
+    const semanticSection = entry.semantic?.section;
+    const preferSemantic =
+      semanticSection !== undefined &&
+      (lexicalPick === null || (entry.semanticRank ?? Infinity) < SEMANTIC_SECTION_RANK);
+    const section = preferSemantic ? semanticSection : lexicalPick?.heading ?? undefined;
+    const sectionBody = preferSemantic ? sectionText(doc, semanticSection) : lexicalPick?.text;
     const result: SearchDocsResult = {
       slug: doc.slug,
       title: doc.title,
-      snippet: snippetFrom(pick?.text || doc.body, usedTerms),
-      score: Math.round(score * 100) / 100,
+      snippet: snippetFrom(sectionBody || doc.body, usedTerms),
+      score: fused ? Math.round(entry.score * 1e4) / 1e4 : Math.round(entry.score * 100) / 100,
       type: doc.type,
       domain: doc.domain,
       status: doc.status,
       relativePath: doc.relativePath,
       ...(doc.frontmatter.updated ? { updated: doc.frontmatter.updated } : {}),
       ...(section ? { section } : {}),
-      matchMode: matched === usedTerms.length ? 'all' : 'any',
+      matchMode: entry.matched === 0 ? 'semantic' : entry.matched === usedTerms.length ? 'all' : 'any',
     };
     if (input.includeTop && rank === 0) {
       const full = section
-        ? extractSection(doc.body, parseHeadings(doc.body), section)?.text ?? pick?.text ?? doc.body
+        ? extractSection(doc.body, parseHeadings(doc.body), section)?.text ?? sectionBody ?? doc.body
         : doc.body;
       result.top = { ...(section ? { section } : {}), text: full.slice(0, topChars) };
     }
@@ -293,7 +360,7 @@ export function toMcpSearchHit(hit: SearchDocsResult): Record<string, unknown> {
     ...(hit.updated ? { updated: hit.updated } : {}),
     ...(hit.section ? { section: hit.section } : {}),
     snippet: hit.snippet,
-    ...(hit.matchMode === 'any' ? { matchMode: 'any' } : {}),
+    ...(hit.matchMode && hit.matchMode !== 'all' ? { matchMode: hit.matchMode } : {}),
     ...(hit.top ? { top: hit.top } : {}),
   };
 }

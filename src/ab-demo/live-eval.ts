@@ -1,3 +1,4 @@
+import type { SemanticLookup } from '../embeddings/types.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DocIndex } from '../index/doc-index.js';
@@ -27,6 +28,8 @@ export interface RunLiveEvalOptions {
   dryRun?: boolean;
   baselineTranscript?: string;
   repomindTranscript?: string;
+  /** Prepared vector index; when set, the repomind arm searches hybrid. */
+  semantic?: SemanticLookup | null;
 }
 
 function tokenWinner(
@@ -185,6 +188,7 @@ export function buildLiveEvalResult(
   return {
     runAt: new Date().toISOString(),
     evalKind: 'live',
+    searchMode: options.semantic ? 'hybrid' : 'lexical',
     corpusCwd: path.resolve(options.cwd),
     questionsFile: options.questionsFile,
     questionsVersion,
@@ -210,6 +214,7 @@ export function runLiveEval(options: RunLiveEvalOptions): number {
   const cwd = path.resolve(options.cwd);
   const questionsPayload = loadQuestions(options.questionsFile);
   const index = new DocIndex(cwd);
+  index.semantic = options.semantic ?? null;
 
   const report = validateQuestionsAgainstIndex(index, questionsPayload.questions, cwd);
   if (report.missingAnchors.length > 0) {
@@ -287,6 +292,7 @@ export function mergeHumanScores(
 
   merged.blindPackPath = raw.blindPackPath;
   merged.runAt = raw.runAt;
+  merged.searchMode = raw.searchMode;
 
   const dest = outputPath ?? resultsPath;
   fs.writeFileSync(dest, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');

@@ -47,6 +47,7 @@ Then ask your agent a project question — it should call `search_docs` / `get_d
 | `repo-mind sync-links` | Convert markdown links to wikilinks; sync `related:` |
 | `repo-mind export` | Write `agents-export.md` flat dump to repo root |
 | `repo-mind publish` | Publish active drafts to `docs/`; `--pr` opens a GitHub pull request |
+| `repo-mind embed` | Build the local embedding cache for semantic search (optional, see below) |
 | `repo-mind mcp` | Start the MCP stdio server |
 | `repo-mind ui` | Confluence-style workspace over `docs/` (127.0.0.1:3847) |
 | `npm run ab-demo` | Validate A/B demo fixture (repo checkout only) |
@@ -114,6 +115,22 @@ REPOMIND_UI_PASSWORD=your-password
 Pages are also exposed as MCP resources: `repomind://doc/{slug}`. Read tools carry `readOnlyHint`, and the server ships usage `instructions`. Errors are structured (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, …).
 
 The server finds `docs/` by walking up from its working directory. Pin it explicitly with `repo-mind mcp --cwd <dir>` or `REPOMIND_ROOT=<dir>` when your MCP client does not start it inside the project.
+
+## Semantic search (optional)
+
+Lexical search cannot bridge languages or paraphrases: a Russian question will not find an English page that shares no words with it. RepoMind can blend BM25 with local embeddings. It is **off until the optional dependency is installed**, and nothing leaves your machine.
+
+```bash
+npm i @huggingface/transformers        # optional dependency (downloads onnxruntime)
+npx @justyork/repo-mind embed          # builds the vector cache; first run downloads the model (~120 MB)
+```
+
+- Model: `Xenova/multilingual-e5-small` (100 languages, default). Switch with `REPOMIND_EMBEDDING_MODEL=Xenova/multilingual-e5-base`: slower and larger, a bit better on mixed-language docs. Each model has its own cache.
+- Measured on a real 199-page RU/EN corpus with 10 questions (anchor page in the top 3): BM25 7/10, hybrid with e5-small 8/10, with e5-base 9/10. First-time embedding took ~6 min (small) vs ~14 min (base) on CPU. Ten questions is a small sample, treat it as a signal, not a benchmark.
+- Vectors are cached per page in `docs/.repo-mind/embeddings/` (git-ignored) and re-computed only for changed pages. Expect roughly 5-6 minutes on CPU for ~200 pages the first time.
+- `repo-mind mcp` builds the cache in the background on start; until it finishes, search stays lexical. Hits found only by meaning carry `matchMode: "semantic"`.
+- Disable with `REPOMIND_EMBEDDINGS=off`.
+- Ranking: BM25 and vector order are fused with reciprocal-rank fusion; a `superseded` status only breaks near-ties (the hit still reports it).
 
 ## CI
 
