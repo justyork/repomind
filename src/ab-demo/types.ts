@@ -24,6 +24,8 @@ export interface ArmBaselineResult {
   tokens: number;
   filesRead: number;
   strategy: 'grep-then-read' | 'read-all';
+  /** True when at least one anchor slug was among the files read. */
+  anchorRead: boolean;
 }
 
 export interface ArmRepomindResult {

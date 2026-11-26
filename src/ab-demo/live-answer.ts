@@ -1,7 +1,9 @@
 import type { DocIndex } from '../index/doc-index.js';
+import { extractAskSearchTerms, stemWord, stemsCompatible, tokenizeWords } from '../search/terms.js';
+import { parseHeadings, splitFlatSections } from '../search/sections.js';
 import { getDoc } from '../tools/get-doc.js';
 import { MCP_DEFAULT_SEARCH_LIMIT, searchDocs } from '../tools/search-docs.js';
-import { runArmBaseline } from './arm-baseline.js';
+import { runArmBaseline, selectBaselineDocs } from './arm-baseline.js';
 import { runArmRepomind } from './arm-repomind.js';
 import {
   BASELINE_CLAUDE_SNIPPET,
@@ -21,44 +23,47 @@ function excerpt(body: string, maxChars: number = SNIPPET_CHARS): string {
   return `${trimmed.slice(0, maxChars)}…`;
 }
 
-function queryTerms(prompt: string): string[] {
-  return prompt
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((term) => term.length >= 3);
-}
-
-function docMatchesTerms(doc: { title: string; tags: string[]; body: string }, terms: string[]): boolean {
-  if (terms.length === 0) {
-    return true;
+/**
+ * Excerpt for the blind pack: the section of the page that best matches the question.
+ * Used for both arms so neither is shown a page's irrelevant first lines.
+ */
+export function relevantExcerpt(body: string, prompt: string, maxChars: number = SNIPPET_CHARS): string {
+  const headings = parseHeadings(body);
+  if (headings.length === 0) {
+    return excerpt(body, maxChars);
   }
-  const haystack = `${doc.title}\n${doc.tags.join(' ')}\n${doc.body}`.toLowerCase();
-  return terms.some((term) => haystack.includes(term));
+  const stems = extractAskSearchTerms(prompt).map(stemWord);
+  let best = '';
+  let bestScore = -1;
+  for (const section of splitFlatSections(body, headings)) {
+    const wordStems = tokenizeWords(`${section.heading ?? ''} ${section.text}`).map(stemWord);
+    const score = stems.filter((stem) => wordStems.some((wordStem) => stemsCompatible(wordStem, stem))).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = section.text;
+    }
+  }
+  return excerpt(best || body, maxChars);
 }
 
 /** Build a grounded answer excerpt from baseline grep-then-read retrieval. */
-export function buildBaselineAnswer(index: DocIndex, question: AbQuestion): LiveArmAnswer {
+export function buildBaselineAnswer(
+  index: DocIndex,
+  question: AbQuestion,
+  questionCount?: number,
+): LiveArmAnswer {
   const docs = index.refresh();
-  const terms = queryTerms(question.prompt);
-  let matched = docs.filter((doc) => docMatchesTerms(doc, terms));
-  let strategy: LiveArmAnswer['strategy'] = 'grep-then-read';
-
-  if (matched.length === 0) {
-    matched = docs.slice(0, 5);
-    strategy = 'read-all';
-  } else {
-    matched = matched.slice(0, 5);
-  }
+  const { docs: matched, strategy } = selectBaselineDocs(index, question);
 
   const listing = docs.map((doc) => doc.relativePath).join('\n');
   const sessionOverhead = estimateTokens(BASELINE_CLAUDE_SNIPPET) + estimateTokens(listing);
-  const perQuestionOverhead = Math.ceil(sessionOverhead / Math.max(docs.length, 1));
+  const perQuestionOverhead = Math.ceil(sessionOverhead / Math.max(questionCount ?? docs.length, 1));
 
   const simulated = runArmBaseline(index, question, perQuestionOverhead);
 
   const parts = matched.map((doc) => {
     const title = doc.title || doc.slug;
-    return `## ${title} (${doc.slug})\n\n${excerpt(doc.body)}`;
+    return `## ${title} (${doc.slug})\n\n${relevantExcerpt(doc.body, question.prompt)}`;
   });
 
   return {
@@ -75,10 +80,14 @@ export function buildBaselineAnswer(index: DocIndex, question: AbQuestion): Live
 }
 
 /** Build a grounded answer excerpt from RepoMind search_docs + get_doc retrieval. */
-export function buildRepomindAnswer(index: DocIndex, question: AbQuestion): LiveArmAnswer {
+export function buildRepomindAnswer(
+  index: DocIndex,
+  question: AbQuestion,
+  questionCount?: number,
+): LiveArmAnswer {
   const docs = index.refresh();
   const sessionOverhead = mcpToolSchemaTokenEstimate();
-  const perQuestionOverhead = Math.ceil(sessionOverhead / Math.max(docs.length, 1));
+  const perQuestionOverhead = Math.ceil(sessionOverhead / Math.max(questionCount ?? docs.length, 1));
 
   const simulated = runArmRepomind(index, question, perQuestionOverhead);
 
@@ -91,7 +100,7 @@ export function buildRepomindAnswer(index: DocIndex, question: AbQuestion): Live
     if (doc.found && doc.body) {
       const title =
         typeof doc.frontmatter?.title === 'string' ? doc.frontmatter.title : doc.slug;
-      parts.push(`## ${title} (${doc.slug})\n\n${excerpt(doc.body)}`);
+      parts.push(`## ${title} (${doc.slug})\n\n${relevantExcerpt(doc.body, question.prompt)}`);
     }
   }
 

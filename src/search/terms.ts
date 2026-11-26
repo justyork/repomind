@@ -124,6 +124,41 @@ export const STOP_WORDS = new Set([
   'был',
   'была',
   'были',
+  'такое',
+  'такой',
+  'такая',
+  'такие',
+  'используется',
+  'используются',
+  'использует',
+  'каком',
+  'какого',
+  'какому',
+  'каким',
+  'описан',
+  'описана',
+  'описаны',
+  'устроен',
+  'устроена',
+  'реализован',
+  'реализована',
+  'только',
+  'зачем',
+  'нужен',
+  'нужна',
+  'нужно',
+  'нужны',
+  'сколько',
+  'можно',
+  'нельзя',
+  'также',
+  'который',
+  'которая',
+  'которые',
+  'этом',
+  'этого',
+  'обычном',
+  'новых',
 ]);
 
 export const TERM_PATTERN = /[a-z0-9\u0400-\u04ff]+/gi;
@@ -159,8 +194,8 @@ export function tokenizeWords(text: string): string[] {
 }
 
 /**
- * Cheap prefix "stem": long words lose their last 1-2 chars so simple inflections
- * (session/sessions, сохранение/сохранения) share a prefix.
+ * Cheap prefix "stem": long Latin words lose their last 1-2 chars so simple inflections
+ * (session/sessions) share a prefix.
  */
 export function stemPrefix(word: string): string {
   if (word.length >= 7) return word.slice(0, word.length - 2);
@@ -168,8 +203,38 @@ export function stemPrefix(word: string): string {
   return word;
 }
 
-/** True when any word in `words` starts with the stem of `term`. */
+const CYRILLIC = /[а-яё]/;
+// Longest first. A suffix is only stripped when at least 4 letters remain.
+const RU_SUFFIXES = [
+  'ами', 'ями', 'ого', 'его', 'ому', 'ему', 'ыми', 'ими', 'ать', 'ять', 'ить',
+  'ей', 'ий', 'ый', 'ой', 'ая', 'яя', 'ое', 'ее', 'ые', 'ие', 'ую', 'юю', 'ом', 'ем', 'им', 'ым',
+  'ов', 'ев', 'ах', 'ях', 'ам', 'ям', 'ут', 'ют', 'ет', 'ит',
+  'у', 'ю', 'а', 'я', 'о', 'е', 'ы', 'и', 'ь',
+];
+
+/** Language-aware stem: light suffix stripping for Russian, prefix reduction for Latin. */
+export function stemWord(word: string): string {
+  const lower = word.toLowerCase().replace(/ё/g, 'е');
+  if (CYRILLIC.test(lower)) {
+    if (lower.length < 5) return lower;
+    for (const suffix of RU_SUFFIXES) {
+      if (lower.endsWith(suffix) && lower.length - suffix.length >= 4) {
+        return lower.slice(0, lower.length - suffix.length);
+      }
+    }
+    return lower;
+  }
+  return stemPrefix(lower);
+}
+
+/** Two stems match when the shorter (>= 3 chars) is a prefix of the longer. */
+export function stemsCompatible(a: string, b: string): boolean {
+  const [short, long] = a.length <= b.length ? [a, b] : [b, a];
+  return short.length >= 3 && long.startsWith(short);
+}
+
+/** True when any word in `words` shares a stem with `term`. */
 export function wordsMatchTerm(words: string[], term: string): boolean {
-  const stem = stemPrefix(term);
-  return words.some((word) => word.startsWith(stem));
+  const stem = stemWord(term);
+  return words.some((word) => stemsCompatible(stemWord(word), stem));
 }

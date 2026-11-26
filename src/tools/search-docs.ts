@@ -9,7 +9,8 @@ import {
 import {
   TERM_PATTERN,
   extractAskSearchTerms,
-  stemPrefix,
+  stemWord,
+  stemsCompatible,
   tokenizeWords,
 } from '../search/terms.js';
 
@@ -77,7 +78,8 @@ const indexedCache = new WeakMap<DocRecord, IndexedDoc>();
 function statsOf(words: string[]): WordStats {
   const counts = new Map<string, number>();
   for (const word of words) {
-    counts.set(word, (counts.get(word) ?? 0) + 1);
+    const stem = stemWord(word);
+    counts.set(stem, (counts.get(stem) ?? 0) + 1);
   }
   return { length: words.length, counts };
 }
@@ -87,7 +89,8 @@ function indexDoc(doc: DocRecord): IndexedDoc {
   if (cached) return cached;
   const indexed: IndexedDoc = {
     doc,
-    title: statsOf(tokenizeWords(doc.title)),
+    // Slug words count as title words: English slugs are a strong signal for non-English titles.
+    title: statsOf([...tokenizeWords(doc.title), ...tokenizeWords(doc.slug)]),
     tags: statsOf(doc.tags.flatMap((tag) => tokenizeWords(tag))),
     body: statsOf(tokenizeWords(doc.body)),
   };
@@ -97,8 +100,8 @@ function indexDoc(doc: DocRecord): IndexedDoc {
 
 function countPrefix(stats: WordStats, stem: string): number {
   let total = 0;
-  for (const [word, count] of stats.counts) {
-    if (word.startsWith(stem)) total += count;
+  for (const [docStem, count] of stats.counts) {
+    if (stemsCompatible(docStem, stem)) total += count;
   }
   return total;
 }
@@ -127,7 +130,7 @@ function scoreCandidates(
   boosts: (doc: DocRecord) => number,
 ): Scored[] {
   if (candidates.length === 0) return [];
-  const stems = terms.map(stemPrefix);
+  const stems = terms.map(stemWord);
   const tfs = candidates.map((indexed) => stems.map((stem) => weightedTf(indexed, stem)));
   const n = candidates.length;
   const idf = stems.map((_, t) => {
@@ -163,9 +166,10 @@ function clampLimit(limit: number | undefined): number {
 }
 
 function snippetFrom(text: string, terms: string[]): string {
-  const stems = terms.map(stemPrefix);
+  const stems = terms.map(stemWord);
   for (const match of text.toLowerCase().matchAll(TERM_PATTERN)) {
-    if (stems.some((stem) => match[0].startsWith(stem))) {
+    const wordStem = stemWord(match[0]);
+    if (stems.some((stem) => stemsCompatible(wordStem, stem))) {
       const index = match.index ?? 0;
       const start = Math.max(0, index - 40);
       const end = Math.min(text.length, index + match[0].length + 40);
@@ -185,14 +189,14 @@ function pickBestSection(doc: DocRecord, terms: string[]): SectionPick | null {
   if (doc.contentKind !== 'markdown') return null;
   const headings = parseHeadings(doc.body);
   if (headings.length === 0) return null;
-  const stems = terms.map(stemPrefix);
+  const stems = terms.map(stemWord);
   let best: SectionPick | null = null;
   let bestScore = -1;
   for (const section of splitFlatSections(doc.body, headings)) {
-    const words = tokenizeWords(`${section.heading ?? ''} ${section.text}`);
+    const wordStems = tokenizeWords(`${section.heading ?? ''} ${section.text}`).map(stemWord);
     let score = 0;
     for (const stem of stems) {
-      if (words.some((word) => word.startsWith(stem))) score += 1;
+      if (wordStems.some((wordStem) => stemsCompatible(wordStem, stem))) score += 1;
     }
     if (score > bestScore) {
       bestScore = score;
@@ -225,10 +229,10 @@ export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsR
     }
   }
   const queryKebab = kebab(input.query);
-  const queryStems = terms.map(stemPrefix);
+  const queryStems = terms.map(stemWord);
   const queryNamesTitle = (title: string): boolean => {
-    const words = tokenizeWords(title);
-    return words.length > 0 && words.every((word) => queryStems.some((stem) => word.startsWith(stem)));
+    const words = tokenizeWords(title).map(stemWord);
+    return words.length > 0 && words.every((word) => queryStems.some((stem) => stemsCompatible(word, stem)));
   };
   const queryLower = input.query.trim().toLowerCase();
   const boosts = (doc: DocRecord): number => {

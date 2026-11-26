@@ -2,52 +2,116 @@
   "version": 1,
   "questions": [
     {
-      "id": "caravan-definition",
-      "prompt": "What is a caravan in the Skyforge Caravan game world?",
-      "anchorSlugs": ["caravan"],
-      "tags": ["factual", "glossary"]
+      "id": "fuel-refuel-ways",
+      "prompt": "Какими способами можно заправить корабль топливом?",
+      "anchorSlugs": [
+        "fuel"
+      ],
+      "tags": [
+        "factual",
+        "game-design"
+      ]
     },
     {
-      "id": "expedition-flow",
-      "prompt": "How does an expedition work from departure to return?",
-      "anchorSlugs": ["expedition"],
-      "tags": ["factual", "game-design"]
+      "id": "contracts-payment",
+      "prompt": "Как оплачиваются контракты гильдии?",
+      "anchorSlugs": [
+        "guild-contracts"
+      ],
+      "tags": [
+        "factual",
+        "game-design"
+      ]
     },
     {
-      "id": "cargo-hold-role",
-      "prompt": "What is the cargo hold used for during a run?",
-      "anchorSlugs": ["cargo-hold"],
-      "tags": ["factual", "game-design"]
+      "id": "voyage-arrival",
+      "prompt": "Что происходит с кораблём после прибытия и зачем нужна кнопка «Забрать»?",
+      "anchorSlugs": [
+        "voyage-lifecycle"
+      ],
+      "tags": [
+        "factual",
+        "game-design"
+      ]
     },
     {
-      "id": "fuel-tank-mechanic",
-      "prompt": "How does fuel storage and consumption relate to the fuel tank?",
-      "anchorSlugs": ["fuel-tank"],
-      "tags": ["factual", "technical"]
+      "id": "cargo-hold-term",
+      "prompt": "Что такое трюм (cargo hold)?",
+      "anchorSlugs": [
+        "cargo-hold"
+      ],
+      "tags": [
+        "factual",
+        "glossary"
+      ]
     },
     {
-      "id": "dock-work-term",
-      "prompt": "What does dock work mean in game terminology?",
-      "anchorSlugs": ["dock-work-term"],
-      "tags": ["factual", "glossary"]
+      "id": "fuel-tank-term",
+      "prompt": "Что такое топливный бак (fuel tank)?",
+      "anchorSlugs": [
+        "fuel-tank"
+      ],
+      "tags": [
+        "factual",
+        "glossary"
+      ]
     },
     {
       "id": "adr-plain-markdown",
-      "prompt": "Why does the project use plain Markdown for knowledge instead of a database?",
-      "anchorSlugs": ["adr-0004-plain-markdown-knowledge"],
-      "tags": ["factual", "adr"]
+      "prompt": "Почему проект хранит знания в обычном markdown, а не в базе данных?",
+      "anchorSlugs": [
+        "adr-0004-plain-markdown-knowledge"
+      ],
+      "tags": [
+        "factual",
+        "adr"
+      ]
+    },
+    {
+      "id": "adr-price-lock-superseded",
+      "prompt": "Как работает price lock для рынка назначения в экспедиции и актуально ли это решение?",
+      "anchorSlugs": [
+        "adr-0002-expedition-cargo-and-price-lock"
+      ],
+      "tags": [
+        "factual",
+        "adr"
+      ]
     },
     {
       "id": "stack-synthesis",
-      "prompt": "What frontend and tooling stack does the caravan client use, and where is it documented?",
-      "anchorSlugs": ["stack-and-versions", "repository-layout"],
-      "tags": ["synthesis", "technical"]
+      "prompt": "Какой стек используется на фронтенде и бэкенде и в каком документе он описан?",
+      "anchorSlugs": [
+        "engineering-stack-and-versions"
+      ],
+      "tags": [
+        "synthesis",
+        "technical"
+      ]
     },
     {
-      "id": "contract-crisis-link",
-      "prompt": "How do contracts and crises interact in the expedition loop?",
-      "anchorSlugs": ["contract", "crisis"],
-      "tags": ["synthesis", "game-design"]
+      "id": "contracts-events-link",
+      "prompt": "Как контракты гильдии связаны с событиями в рейсе?",
+      "anchorSlugs": [
+        "guild-contracts",
+        "voyage-events"
+      ],
+      "tags": [
+        "synthesis",
+        "game-design"
+      ]
+    },
+    {
+      "id": "onboarding-frontend-only",
+      "prompt": "Как устроен обучающий коуч для новых игроков и почему он реализован только на фронтенде?",
+      "anchorSlugs": [
+        "onboarding-coach",
+        "adr-0005-frontend-only-onboarding-coach"
+      ],
+      "tags": [
+        "synthesis",
+        "game-design"
+      ]
     }
   ]
 }

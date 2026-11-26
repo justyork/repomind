@@ -101,6 +101,16 @@ Body text.`,
       expect(result.outline?.map((h) => h.heading)).toEqual(['Big', 'Part']);
     });
 
+    it('still caps a section that spans most of the page (e.g. the H1)', () => {
+      const big = ['# Big', 'x'.repeat(4000), '## Part', 'y'.repeat(100)].join('\n');
+      fs.writeFileSync(path.join(repo, 'docs/adr/big.md'), `---\ntype: adr\nslug: big\nstatus: accepted\ntitle: Big\n---\n${big}`, 'utf8');
+      const result = getDoc(new DocIndex(repo), 'big', { section: 'Big', autoTruncateAbove: 3000, previewChars: 500 });
+      expect(result.section).toBe('Big');
+      expect(result.body).toHaveLength(500);
+      expect(result.truncated).toBe(true);
+      expect(result.hint).toMatch(/subsection/);
+    });
+
     it('does not auto-truncate when a section is requested', () => {
       const big = ['# Big', 'x'.repeat(4000), '## Part', 'y'.repeat(100)].join('\n');
       fs.writeFileSync(path.join(repo, 'docs/adr/big.md'), `---\ntype: adr\nslug: big\nstatus: accepted\ntitle: Big\n---\n${big}`, 'utf8');

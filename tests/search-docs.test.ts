@@ -79,6 +79,25 @@ describe('search_docs ranking and sections', () => {
     expect(hits[0]?.slug).toBe('caravan');
   });
 
+  it('finds a short Russian glossary page through inflected words', () => {
+    writeRaw(repo, 'glossary/fuel-tank.md', 'type: glossary-term\nslug: fuel-tank\nstatus: accepted\ntitle: Бак топлива (Fuel Tank)', 'Топливо для мобильности каравана.');
+    writeRaw(
+      repo,
+      'specs/fuel.md',
+      'type: feature-spec\nslug: fuel\nstatus: accepted\ntitle: Топливо',
+      'Заправка топливом на острове. Расход топлива в рейсе. Топливо как груз. '.repeat(60),
+    );
+    writeRaw(repo, 'specs/market.md', 'type: feature-spec\nslug: market\nstatus: accepted\ntitle: Рынок', 'Рынок и товары. '.repeat(40));
+    const hits = searchDocs(new DocIndex(repo), { query: 'Что такое топливный бак (fuel tank)?' });
+    expect(hits[0]?.slug).toBe('fuel-tank');
+  });
+
+  it('indexes slug words so an English slug finds a page with a Russian title', () => {
+    writeRaw(repo, 'specs/onboarding-coach.md', 'type: feature-spec\nslug: onboarding-coach\nstatus: accepted\ntitle: Обучение — подсказки поверх интерфейса', 'Подсказки для новых игроков.');
+    writeRaw(repo, 'specs/market.md', 'type: feature-spec\nslug: market\nstatus: accepted\ntitle: Рынок', 'Товары и цены.');
+    expect(searchDocs(new DocIndex(repo), { query: 'onboarding coach' })[0]?.slug).toBe('onboarding-coach');
+  });
+
   it('weights rare terms above common ones', () => {
     writeRaw(repo, 'wiki/common.md', 'type: wiki-page\nslug: common\nstatus: accepted\ntitle: One', 'the system the system the system overview');
     writeRaw(repo, 'wiki/rare.md', 'type: wiki-page\nslug: rare\nstatus: accepted\ntitle: Two', 'overview of zeppelin');

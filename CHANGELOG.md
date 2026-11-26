@@ -9,15 +9,18 @@ All notable changes to this project are documented in this file.
 - **`search_docs`** — natural-language queries work: BM25-style ranking over title/tags/body with stop words dropped and a mild coverage factor (`matchMode: "any"` when some terms are missing); word-boundary matching with light RU/EN inflection; superseded/draft pages down-ranked, pages referenced via `related` and pages named by the query up-ranked; hits carry type/status/domain/updated and the best-matching `section`; `include_top` returns that section's text; new `status` and `limit` params (MCP default 5); per-doc token cache
 - **`get_doc` (MCP)** — returns heading outline and backlinks; `section`, `max_chars` and `full`; pages over ~3000 chars are previewed with a hint; `suggestions` for unknown slugs; no filesystem path or duplicated slug in the payload
 - **MCP schema** — filter enums removed from tool schemas (server validates and reports allowed values); session overhead (instructions + tool list) down ~27%
+- **Search language support** — light Russian stemmer (shared by index and query), Russian question filler words dropped, slug words indexed with the title
 - **MCP resources** — `repomind://doc/{slug}` resource template
 - **`repo-mind setup`** — project-level Cursor config pins `--cwd`; richer CLAUDE.md snippet teaching the search -> section -> status workflow
 - **`explore_graph`** — `direction` (`out`/`in`/`both`); edges only between existing docs
 - **MCP server** — usage `instructions`, richer tool descriptions, `readOnlyHint` annotations, structured errors (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, `UNKNOWN_TOOL`); invalid enum filters are rejected instead of ignored; `create_draft` is listed only when agent write is enabled
 - **`repo-mind mcp`** — `--cwd <dir>` and `REPOMIND_ROOT` select the project
-- **A/B harness** — repomind arm uses MCP defaults (limit 5, section hints, outline/backlinks), records `anchorFound` and `toolCalls`; token schema is built from the real tool definitions; corpus gained two realistic-size pages (economy-system, release-process) and three questions
+- **A/B harness** — repomind arm uses MCP defaults (limit 5, section hints, outline/backlinks), records `anchorFound` and `toolCalls`; token schema is built from the real tool definitions; `ab-demo/skyforge-questions.json` rewritten for the current skyforge docs (10 Russian questions); corpus gained two realistic-size pages (economy-system, release-process) and three questions
 
 ### Fixed
 
+- **A/B baseline** — grep terms were Latin-only, so Russian prompts made the baseline read the whole corpus; it now greps stemmed roots, opens the top 3 files and records `anchorRead`. Live-eval excerpts use the best-matching section for both arms and overhead is split per question
+- **Long sections** — `get_doc` previews now also cap a section that spans most of the page (e.g. an H1)
 - **`explore_graph` depth** — `depth: N` previously walked N-1 hops (`depth: 1` returned the root only)
 
 ## [0.9.0] - 2026-07-09

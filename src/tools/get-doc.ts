@@ -136,16 +136,19 @@ export function getDoc(index: DocIndex, slug: string, options: GetDocOptions = {
 
   if (
     result.body !== undefined &&
-    !options.section &&
     options.maxChars === undefined &&
     options.autoTruncateAbove !== undefined &&
     result.body.length > options.autoTruncateAbove
   ) {
+    // Also applies to sections: a top-level heading can span nearly the whole page.
     const preview = options.previewChars ?? options.autoTruncateAbove;
+    const subject = result.section_found ? `Section "${result.section}"` : 'Long page';
     result.total_chars = result.body.length;
     result.body = result.body.slice(0, preview);
     result.truncated = true;
-    result.hint = `Long page (${result.total_chars} chars): showing the first ${preview}. Pass section=<heading> (see outline) or full=true.`;
+    result.hint = result.section_found
+      ? `${subject} is long (${result.total_chars} chars): showing the first ${preview}. Ask for a subsection (see outline) or pass full=true.`
+      : `${subject} (${result.total_chars} chars): showing the first ${preview}. Pass section=<heading> (see outline) or full=true.`;
   }
 
   if (options.backlinks) {

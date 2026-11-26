@@ -76,6 +76,7 @@ function toComparison(row: LiveQuestionResult): AbQuestionComparison {
       tokens: row.baseline.tokens,
       filesRead: row.baseline.filesRead,
       strategy: row.baseline.strategy as 'grep-then-read' | 'read-all',
+      anchorRead: row.anchorSlugs.some((slug) => row.baseline.retrievedSlugs.includes(slug)),
     },
     repomind: {
       arm: 'repomind',
@@ -96,8 +97,8 @@ export function runLiveEvalQuestions(
   options: Pick<RunLiveEvalOptions, 'baselineTranscript' | 'repomindTranscript'>,
 ): LiveQuestionResult[] {
   return questions.map((question, questionIndex) => {
-    const baseline = buildBaselineAnswer(index, question);
-    const repomind = buildRepomindAnswer(index, question);
+    const baseline = buildBaselineAnswer(index, question, questions.length);
+    const repomind = buildRepomindAnswer(index, question, questions.length);
 
     applyTranscriptTokens(baseline, options.baselineTranscript);
     applyTranscriptTokens(repomind, options.repomindTranscript);
