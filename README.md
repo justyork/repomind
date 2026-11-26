@@ -104,12 +104,16 @@ REPOMIND_UI_PASSWORD=your-password
 
 ## MCP tools
 
-- `list_docs` — filter by type, status, tag
-- `search_docs` — ranked full-text search
-- `get_doc` — fetch one doc by slug
+- `search_docs` — keywords or a natural-language question; tries all terms, then relaxes to any term (`matchMode: "any"`). Filters: `type`, `domain`, `status`, `limit` (default 5). Hits include type/status/domain so superseded pages are visible.
+- `get_doc` — one page by slug: frontmatter, body, heading `outline`, `backlinks`. Long pages: `section` (heading text) or `max_chars`. Unknown slug returns `suggestions`.
+- `explore_graph` — walk links from a page. `depth` = hops (default 2), `direction` = `out` | `in` | `both`.
 - `get_glossary_term` — resolve glossary entries
-- `explore_graph` — BFS over `related:` links
-- `create_draft` — create a SQLite draft for human review (gated on kill-switch pass)
+- `list_docs` — browse every page (prefer `search_docs` on large repos)
+- `create_draft` — SQLite draft for human review; only listed when agent write is enabled (kill-switch pass or `REPOMIND_AGENT_WRITE=1`)
+
+Read tools carry `readOnlyHint`, and the server ships usage `instructions`. Errors are structured (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, …).
+
+The server finds `docs/` by walking up from its working directory. Pin it explicitly with `repo-mind mcp --cwd <dir>` or `REPOMIND_ROOT=<dir>` when your MCP client does not start it inside the project.
 
 ## CI
 

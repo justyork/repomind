@@ -51,9 +51,57 @@ describe('search_docs', () => {
     expect(results[0]?.slug).toBe('auth');
   });
 
-  it('requires all terms (AND)', () => {
-    expect(searchDocs(index, { query: 'session cache' })).toHaveLength(0);
-    expect(searchDocs(index, { query: 'login session' })).toHaveLength(1);
+  it('ranks docs matching all terms above partial matches', () => {
+    const results = searchDocs(index, { query: 'login session' });
+    expect(results).toHaveLength(1);
+    expect(results[0]?.matchMode).toBe('all');
+  });
+
+  it('falls back to any-term matching when no doc has every term', () => {
+    const results = searchDocs(index, { query: 'session cache' });
+    expect(results.map((r) => r.slug).sort()).toEqual(['auth', 'cache']);
+    expect(results.every((r) => r.matchMode === 'any')).toBe(true);
+  });
+
+  it('handles natural-language questions by dropping stop words', () => {
+    const results = searchDocs(index, { query: 'how does the cache work?' });
+    expect(results[0]?.slug).toBe('cache');
+  });
+
+  it('matches on word boundaries, not substrings', () => {
+    writeDoc(repo, 'start', 'Startup', 'boot sequence');
+    const results = searchDocs(new DocIndex(repo), { query: 'art' });
+    expect(results).toHaveLength(0);
+  });
+
+  it('matches simple inflections (en and ru)', () => {
+    writeDoc(repo, 'save', 'Сохранение', 'Система сохранения прогресса игрока');
+    const idx = new DocIndex(repo);
+    expect(searchDocs(idx, { query: 'сохранение прогресса' })[0]?.slug).toBe('save');
+    expect(searchDocs(idx, { query: 'sessions' })[0]?.slug).toBe('auth');
+  });
+
+  it('returns type, domain, status and path metadata', () => {
+    const [hit] = searchDocs(index, { query: 'session' });
+    expect(hit).toMatchObject({
+      slug: 'auth',
+      type: 'glossary-term',
+      status: 'accepted',
+      relativePath: 'glossary/auth.md',
+    });
+    expect(hit?.domain).toBeTruthy();
+  });
+
+  it('filters by status', () => {
+    expect(searchDocs(index, { query: 'session', status: 'superseded' })).toHaveLength(0);
+    expect(searchDocs(index, { query: 'session', status: 'accepted' })).toHaveLength(1);
+  });
+
+  it('honours limit', () => {
+    for (let i = 0; i < 8; i += 1) {
+      writeDoc(repo, `term-${i}`, `Term ${i}`, 'shared keyword body');
+    }
+    expect(searchDocs(new DocIndex(repo), { query: 'shared', limit: 3 })).toHaveLength(3);
   });
 
   it('caps results at 20', () => {

@@ -24,10 +24,11 @@ Usage:
   repo-mind sync-links [--dry-run] [--no-convert-body] [--no-sync-related] [--cwd <dir>]
   repo-mind publish [--pr] [--dry-run] [--draft <id>] [--message <text>] [--title <text>] [--body <text>] [--cwd <dir>]
   repo-mind ab-eval --cwd <dir> [--questions <path>] [--output <path>] [--dry-run]
-  repo-mind mcp
+  repo-mind mcp [--cwd <dir>]
   repo-mind ui [--port <n>] [--cwd <dir>]
 
 Environment:
+  REPOMIND_ROOT          Project directory for the mcp command when --cwd is not given
   REPOMIND_UI_PASSWORD   When set, protects the UI and API with password login
   REPOMIND_ASK_API_KEY   Optional default API key for the Ask assistant (BYOK)
   REPOMIND_ASK_PROVIDER  Ask LLM provider: openai (default) or anthropic
@@ -281,7 +282,7 @@ async function main(): Promise<void> {
       );
       break;
     case 'mcp':
-      await startMcpServer();
+      await startMcpServer({ cwd });
       break;
     case 'ui': {
       const portRaw = typeof flags.port === 'string' ? Number.parseInt(flags.port, 10) : undefined;

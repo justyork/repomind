@@ -8,9 +8,16 @@ import {
 import type { DocType } from '../index/types.js';
 import { buildDocsTree, collectParentOfEdges } from '../ui/fs-tree.js';
 
+export const DEFAULT_GRAPH_DEPTH = 2;
+
+export type GraphDirection = 'out' | 'in' | 'both';
+
 export interface ExploreGraphInput {
   slug: string;
+  /** Hops from the root slug (0 = root only). Default 2. */
   depth?: number;
+  /** out: links the doc makes; in: backlinks; both: either. Default out. */
+  direction?: GraphDirection;
 }
 
 export interface ExploreGraphNode {
@@ -50,11 +57,7 @@ export function exploreGraph(
     broken_links: [],
   };
 
-  if (!index.getKnowledgeRoot()) {
-    return empty;
-  }
-
-  if (!isValidSlug(input.slug)) {
+  if (!index.getKnowledgeRoot() || !isValidSlug(input.slug)) {
     return empty;
   }
 
@@ -63,60 +66,70 @@ export function exploreGraph(
     return empty;
   }
 
-  let maxDepth = input.depth ?? 3;
-  if (maxDepth <= 0) {
-    maxDepth = 1;
-  }
+  // depth = number of hops from the root (0 = root only).
+  const maxDepth = Math.max(0, Math.floor(input.depth ?? DEFAULT_GRAPH_DEPTH));
+  const direction = input.direction ?? 'out';
 
   const linkIndex = buildSnapshot(index);
   const nodes = new Map<string, ExploreGraphNode>();
+  const edgeKeys = new Set<string>();
   const edges: ExploreGraphEdge[] = [];
   const brokenLinks = new Set<string>(linkIndex.brokenTargets);
-  const visited = new Set<string>();
+  const seen = new Set<string>([rootDoc.slug]);
   let maxDepthReached = 0;
   let truncated = false;
 
-  type QueueItem = { slug: string; depth: number };
-  const queue: QueueItem[] = [{ slug: rootDoc.slug, depth: 0 }];
+  function addEdge(from: string, to: string): void {
+    const key = `${from}\0${to}`;
+    if (!edgeKeys.has(key)) {
+      edgeKeys.add(key);
+      edges.push({ from, to });
+    }
+  }
+
+  function neighbours(slug: string): Array<{ other: string; from: string; to: string }> {
+    const result: Array<{ other: string; from: string; to: string }> = [];
+    if (direction === 'out' || direction === 'both') {
+      for (const to of getOutboundSlugs(linkIndex, slug)) {
+        result.push({ other: to, from: slug, to });
+      }
+    }
+    if (direction === 'in' || direction === 'both') {
+      for (const entry of linkIndex.backlinks.get(slug) ?? []) {
+        result.push({ other: entry.from, from: entry.from, to: slug });
+      }
+    }
+    return result;
+  }
+
+  const queue: Array<{ slug: string; depth: number }> = [{ slug: rootDoc.slug, depth: 0 }];
 
   while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current || visited.has(current.slug)) {
-      continue;
-    }
-
-    visited.add(current.slug);
+    const current = queue.shift()!;
     const doc = index.getDocBySlug(current.slug);
     if (!doc) {
       continue;
     }
 
-    nodes.set(doc.slug, {
-      slug: doc.slug,
-      type: doc.type,
-      title: doc.title,
-    });
+    nodes.set(doc.slug, { slug: doc.slug, type: doc.type, title: doc.title });
     maxDepthReached = Math.max(maxDepthReached, current.depth);
 
-    const outbound = getOutboundSlugs(linkIndex, doc.slug);
-
-    if (current.depth + 1 >= maxDepth) {
-      if (outbound.length > 0) {
-        truncated = true;
-      }
-      continue;
-    }
-
-    for (const targetSlug of outbound) {
-      edges.push({ from: doc.slug, to: targetSlug });
-      const targetDoc = index.getDocBySlug(targetSlug);
-      if (!targetDoc) {
-        brokenLinks.add(targetSlug);
+    for (const link of neighbours(doc.slug)) {
+      if (!index.getDocBySlug(link.other)) {
+        brokenLinks.add(link.other);
         continue;
       }
-      if (!visited.has(targetSlug)) {
-        queue.push({ slug: targetSlug, depth: current.depth + 1 });
+      if (seen.has(link.other)) {
+        addEdge(link.from, link.to);
+        continue;
       }
+      if (current.depth >= maxDepth) {
+        truncated = true;
+        continue;
+      }
+      seen.add(link.other);
+      addEdge(link.from, link.to);
+      queue.push({ slug: link.other, depth: current.depth + 1 });
     }
   }
 

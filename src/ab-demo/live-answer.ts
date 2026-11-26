@@ -1,6 +1,6 @@
 import type { DocIndex } from '../index/doc-index.js';
 import { getDoc } from '../tools/get-doc.js';
-import { searchDocs } from '../tools/search-docs.js';
+import { MCP_DEFAULT_SEARCH_LIMIT, searchDocs } from '../tools/search-docs.js';
 import { runArmBaseline } from './arm-baseline.js';
 import { runArmRepomind } from './arm-repomind.js';
 import {
@@ -82,7 +82,7 @@ export function buildRepomindAnswer(index: DocIndex, question: AbQuestion): Live
 
   const simulated = runArmRepomind(index, question, perQuestionOverhead);
 
-  const hits = searchDocs(index, { query: question.prompt });
+  const hits = searchDocs(index, { query: question.prompt, limit: MCP_DEFAULT_SEARCH_LIMIT });
   const slugsToFetch = hits.slice(0, GET_DOC_LIMIT).map((hit) => hit.slug);
   const parts: string[] = [];
 

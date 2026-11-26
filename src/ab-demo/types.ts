@@ -32,6 +32,8 @@ export interface ArmRepomindResult {
   tokens: number;
   searchHits: number;
   docsFetched: number;
+  /** True when at least one anchor slug was among the fetched docs. */
+  anchorFound: boolean;
 }
 
 export interface AbQuestionComparison {

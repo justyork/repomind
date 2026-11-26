@@ -83,6 +83,7 @@ function toComparison(row: LiveQuestionResult): AbQuestionComparison {
       tokens: row.repomind.tokens,
       searchHits: row.repomind.searchHits,
       docsFetched: row.repomind.docsFetched,
+      anchorFound: row.anchorSlugs.some((slug) => row.repomind.retrievedSlugs.includes(slug)),
     },
     tokenWinner: row.tokenWinner,
   };

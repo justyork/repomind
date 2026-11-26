@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Changed
+
+- **`search_docs`** — natural-language queries work: AND, then stop-words dropped, then any-term fallback (`matchMode`); word-boundary matching with light RU/EN inflection; hits carry type/status/domain/updated; new `status` and `limit` params (MCP default 5)
+- **`get_doc` (MCP)** — returns heading outline and backlinks; `section` and `max_chars` for long pages; `suggestions` for unknown slugs
+- **`explore_graph`** — `direction` (`out`/`in`/`both`); edges only between existing docs
+- **MCP server** — usage `instructions`, richer tool descriptions, `readOnlyHint` annotations, structured errors (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, `UNKNOWN_TOOL`); invalid enum filters are rejected instead of ignored; `create_draft` is listed only when agent write is enabled
+- **`repo-mind mcp`** — `--cwd <dir>` and `REPOMIND_ROOT` select the project
+- **A/B harness** — repomind arm now uses MCP defaults (limit 5, outline/backlinks) and records `anchorFound`; token schema is built from the real tool definitions
+
+### Fixed
+
+- **`explore_graph` depth** — `depth: N` previously walked N-1 hops (`depth: 1` returned the root only)
+
 ## [0.9.0] - 2026-07-09
 
 ### Added

@@ -4,200 +4,204 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import { getPackageVersion } from '../package-version.js';
+import { getAgentWriteGate } from '../agent-write-gate.js';
 import { DocIndex } from '../index/doc-index.js';
-import { DOC_TYPES, DOC_STATUSES, DOC_DOMAINS } from '../index/types.js';
-import { exploreGraph } from '../tools/explore-graph.js';
+import { DOC_DOMAINS, DOC_STATUSES, DOC_TYPES } from '../index/types.js';
+import { getPackageVersion } from '../package-version.js';
 import { createDraft } from '../tools/create-draft.js';
-import { getDoc } from '../tools/get-doc.js';
+import { exploreGraph, type GraphDirection } from '../tools/explore-graph.js';
+import { MCP_GET_DOC_OPTIONS, getDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
-import { searchDocs } from '../tools/search-docs.js';
+import { MCP_DEFAULT_SEARCH_LIMIT, searchDocs, toMcpSearchHit } from '../tools/search-docs.js';
+import {
+  SERVER_INSTRUCTIONS,
+  buildToolDefinitions,
+  isToolName,
+} from './tool-definitions.js';
 
-const TOOL_NAMES = [
-  'list_docs',
-  'search_docs',
-  'get_doc',
-  'get_glossary_term',
-  'explore_graph',
-  'create_draft',
-] as const;
+const GRAPH_DIRECTIONS = ['out', 'in', 'both'] as const;
 
-type ToolName = (typeof TOOL_NAMES)[number];
-
-function isToolName(name: string): name is ToolName {
-  return (TOOL_NAMES as readonly string[]).includes(name);
+interface ToolFailure {
+  code: string;
+  message: string;
+  hint?: string;
 }
 
-let acceptingCalls = true;
+type Parsed<T> = { ok: true; value: T } | { ok: false; error: ToolFailure };
 
-export async function startMcpServer(): Promise<void> {
-  const index = new DocIndex(process.cwd());
+function optionalEnum<T extends string>(
+  args: Record<string, unknown>,
+  key: string,
+  allowed: readonly T[],
+): Parsed<T | undefined> {
+  const raw = args[key];
+  if (raw === undefined || raw === null || raw === '') {
+    return { ok: true, value: undefined };
+  }
+  if (typeof raw === 'string' && (allowed as readonly string[]).includes(raw)) {
+    return { ok: true, value: raw as T };
+  }
+  return {
+    ok: false,
+    error: {
+      code: 'BAD_ARGUMENT',
+      message: `invalid ${key}: ${JSON.stringify(raw)}`,
+      hint: `expected one of: ${allowed.join(', ')}`,
+    },
+  };
+}
+
+function str(args: Record<string, unknown>, key: string): string {
+  return typeof args[key] === 'string' ? (args[key] as string) : '';
+}
+
+function num(args: Record<string, unknown>, key: string): number | undefined {
+  const raw = args[key];
+  return typeof raw === 'number' && Number.isFinite(raw) ? raw : undefined;
+}
+
+function toolResult(payload: unknown) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
+  };
+}
+
+function toolError(error: ToolFailure) {
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify({ error }) }],
+    isError: true,
+  };
+}
+
+/** Collects the first enum failure, if any, so a bad filter never silently widens a query. */
+function firstFailure(...parsed: Array<Parsed<unknown>>): ToolFailure | null {
+  for (const entry of parsed) {
+    if (!entry.ok) {
+      return entry.error;
+    }
+  }
+  return null;
+}
+
+function callTool(index: DocIndex, cwd: string, name: string, args: Record<string, unknown>) {
+  if (!isToolName(name)) {
+    return toolError({ code: 'UNKNOWN_TOOL', message: `Unknown tool: ${name}` });
+  }
+
+  if (!index.getKnowledgeRoot()) {
+    index.rediscover();
+  }
+  if (!index.getKnowledgeRoot()) {
+    return toolError({
+      code: 'NO_KNOWLEDGE_ROOT',
+      message: `No docs/ directory found from ${cwd} (or any parent).`,
+      hint: 'Start the server inside the project, pass --cwd <dir> to "repo-mind mcp", or set REPOMIND_ROOT.',
+    });
+  }
+
+  switch (name) {
+    case 'list_docs': {
+      const type = optionalEnum(args, 'type', DOC_TYPES);
+      const status = optionalEnum(args, 'status', DOC_STATUSES);
+      const domain = optionalEnum(args, 'domain', DOC_DOMAINS);
+      const failure = firstFailure(type, status, domain);
+      if (failure) return toolError(failure);
+      return toolResult(
+        listDocs(index, {
+          type: type.ok ? type.value : undefined,
+          status: status.ok ? status.value : undefined,
+          domain: domain.ok ? domain.value : undefined,
+          tag: typeof args.tag === 'string' ? args.tag : undefined,
+        }),
+      );
+    }
+    case 'search_docs': {
+      const type = optionalEnum(args, 'type', DOC_TYPES);
+      const status = optionalEnum(args, 'status', DOC_STATUSES);
+      const domain = optionalEnum(args, 'domain', DOC_DOMAINS);
+      const failure = firstFailure(type, status, domain);
+      if (failure) return toolError(failure);
+      return toolResult(
+        searchDocs(index, {
+          query: str(args, 'query'),
+          type: type.ok ? type.value : undefined,
+          status: status.ok ? status.value : undefined,
+          domain: domain.ok ? domain.value : undefined,
+          limit: num(args, 'limit') ?? MCP_DEFAULT_SEARCH_LIMIT,
+        }).map(toMcpSearchHit),
+      );
+    }
+    case 'get_doc':
+      return toolResult(
+        getDoc(index, str(args, 'slug'), {
+          ...MCP_GET_DOC_OPTIONS,
+          section: typeof args.section === 'string' && args.section ? args.section : undefined,
+          maxChars: num(args, 'max_chars'),
+        }),
+      );
+    case 'get_glossary_term':
+      return toolResult(getGlossaryTerm(index, str(args, 'name')));
+    case 'explore_graph': {
+      const direction = optionalEnum<GraphDirection>(args, 'direction', GRAPH_DIRECTIONS);
+      if (!direction.ok) return toolError(direction.error);
+      return toolResult(
+        exploreGraph(index, {
+          slug: str(args, 'slug'),
+          depth: num(args, 'depth'),
+          direction: direction.value,
+        }),
+      );
+    }
+    case 'create_draft': {
+      const result = createDraft(index, {
+        type: str(args, 'type'),
+        title: str(args, 'title'),
+        body: str(args, 'body'),
+        slug: typeof args.slug === 'string' ? args.slug : undefined,
+        related: Array.isArray(args.related) ? (args.related as string[]) : undefined,
+        tags: Array.isArray(args.tags) ? (args.tags as string[]) : undefined,
+        forked_from: typeof args.forked_from === 'string' ? args.forked_from : undefined,
+      });
+      return result.ok ? toolResult(result.data) : toolError(result.error);
+    }
+    default: {
+      const unknownTool: never = name;
+      return toolError({ code: 'UNKNOWN_TOOL', message: `Unknown tool: ${unknownTool}` });
+    }
+  }
+}
+
+/** Builds the MCP server without connecting a transport (testable in-memory). */
+export function createMcpServer(index: DocIndex, cwd: string = process.cwd()): Server {
   const server = new Server(
     { name: 'repo-mind', version: getPackageVersion() },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      {
-        name: 'list_docs',
-        description: 'List project knowledge documents with optional filters.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: [...DOC_TYPES] },
-            status: { type: 'string', enum: [...DOC_STATUSES] },
-            tag: { type: 'string' },
-            domain: { type: 'string', enum: [...DOC_DOMAINS] },
-          },
-        },
-      },
-      {
-        name: 'search_docs',
-        description: 'Search project knowledge documents by query.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            query: { type: 'string' },
-            type: { type: 'string', enum: [...DOC_TYPES] },
-            domain: { type: 'string', enum: [...DOC_DOMAINS] },
-          },
-          required: ['query'],
-        },
-      },
-      {
-        name: 'get_doc',
-        description: 'Fetch a single document by slug.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            slug: { type: 'string' },
-          },
-          required: ['slug'],
-        },
-      },
-      {
-        name: 'get_glossary_term',
-        description: 'Resolve a glossary term by name.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            name: { type: 'string' },
-          },
-          required: ['name'],
-        },
-      },
-      {
-        name: 'explore_graph',
-        description: 'Explore related documents as a graph.',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            slug: { type: 'string' },
-            depth: { type: 'number' },
-          },
-          required: ['slug'],
-        },
-      },
-      {
-        name: 'create_draft',
-        description:
-          'Create a SQLite-backed draft for human review in repo-mind UI (gated on ab-demo kill-switch or REPOMIND_AGENT_WRITE=1).',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            type: { type: 'string', enum: [...DOC_TYPES] },
-            title: { type: 'string' },
-            body: { type: 'string' },
-            slug: { type: 'string' },
-            related: { type: 'array', items: { type: 'string' } },
-            tags: { type: 'array', items: { type: 'string' } },
-            forked_from: { type: 'string' },
-          },
-          required: ['type', 'title', 'body'],
-        },
-      },
-    ],
+    tools: buildToolDefinitions({ writeEnabled: getAgentWriteGate(cwd).enabled }),
   }));
 
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    if (!acceptingCalls) {
-      throw new Error('Server is shutting down');
-    }
+  server.setRequestHandler(CallToolRequestSchema, async (request) =>
+    callTool(index, cwd, request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>),
+  );
 
-    const args = (request.params.arguments ?? {}) as Record<string, unknown>;
+  return server;
+}
 
-    const toolName = request.params.name;
-    if (!isToolName(toolName)) {
-      throw new Error(`Unknown tool: ${toolName}`);
-    }
+export interface McpServerOptions {
+  /** Project directory; defaults to REPOMIND_ROOT, then process.cwd(). */
+  cwd?: string;
+}
 
-    switch (toolName) {
-      case 'list_docs':
-        return toolResult(
-          listDocs(index, {
-            type: typeof args.type === 'string' ? (args.type as (typeof DOC_TYPES)[number]) : undefined,
-            status:
-              typeof args.status === 'string'
-                ? (args.status as (typeof DOC_STATUSES)[number])
-                : undefined,
-            tag: typeof args.tag === 'string' ? args.tag : undefined,
-            domain:
-              typeof args.domain === 'string'
-                ? (args.domain as (typeof DOC_DOMAINS)[number])
-                : undefined,
-          }),
-        );
-      case 'search_docs':
-        return toolResult(
-          searchDocs(index, {
-            query: typeof args.query === 'string' ? args.query : '',
-            type: typeof args.type === 'string' ? (args.type as (typeof DOC_TYPES)[number]) : undefined,
-            domain:
-              typeof args.domain === 'string'
-                ? (args.domain as (typeof DOC_DOMAINS)[number])
-                : undefined,
-          }),
-        );
-      case 'get_doc':
-        return toolResult(
-          getDoc(index, typeof args.slug === 'string' ? args.slug : ''),
-        );
-      case 'get_glossary_term':
-        return toolResult(
-          getGlossaryTerm(index, typeof args.name === 'string' ? args.name : ''),
-        );
-      case 'explore_graph':
-        return toolResult(
-          exploreGraph(index, {
-            slug: typeof args.slug === 'string' ? args.slug : '',
-            depth: typeof args.depth === 'number' ? args.depth : undefined,
-          }),
-        );
-      case 'create_draft': {
-        const result = createDraft(index, {
-          type: typeof args.type === 'string' ? args.type : '',
-          title: typeof args.title === 'string' ? args.title : '',
-          body: typeof args.body === 'string' ? args.body : '',
-          slug: typeof args.slug === 'string' ? args.slug : undefined,
-          related: Array.isArray(args.related) ? (args.related as string[]) : undefined,
-          tags: Array.isArray(args.tags) ? (args.tags as string[]) : undefined,
-          forked_from: typeof args.forked_from === 'string' ? args.forked_from : undefined,
-        });
-        if (!result.ok) {
-          return toolError(result.error);
-        }
-        return toolResult(result.data);
-      }
-      default: {
-        const unknownTool: never = toolName;
-        throw new Error(`Unknown tool: ${unknownTool}`);
-      }
-    }
-  });
+export async function startMcpServer(options: McpServerOptions = {}): Promise<void> {
+  const cwd = options.cwd ?? process.env.REPOMIND_ROOT ?? process.cwd();
+  const server = createMcpServer(new DocIndex(cwd), cwd);
 
+  let acceptingCalls = true;
   const shutdown = async () => {
+    if (!acceptingCalls) return;
     acceptingCalls = false;
     await server.close();
     process.exit(0);
@@ -213,19 +217,5 @@ export async function startMcpServer(): Promise<void> {
     void shutdown();
   });
 
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
-}
-
-function toolResult(payload: unknown) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify(payload) }],
-  };
-}
-
-function toolError(error: { code: string; message: string; hint?: string }) {
-  return {
-    content: [{ type: 'text' as const, text: JSON.stringify({ error }) }],
-    isError: true,
-  };
+  await server.connect(new StdioServerTransport());
 }

@@ -131,10 +131,10 @@ Flags:
 | Tool | Input | Output highlights |
 |------|-------|-------------------|
 | `list_docs` | optional type, status, tag filters | slug list |
-| `search_docs` | query string | ranked matches |
-| `get_doc` | slug | frontmatter + body |
+| `search_docs` | query (keywords or question), type/domain/status, limit | ranked hits with type/status/domain |
+| `get_doc` | slug, section, max_chars | frontmatter + body + outline + backlinks |
 | `get_glossary_term` | name | definition + related |
-| `explore_graph` | slug, depth | nodes, edges, broken_links |
+| `explore_graph` | slug, depth (hops), direction out/in/both | nodes, edges, broken_links |
 
 ## repo-mind check
 
