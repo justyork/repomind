@@ -48,6 +48,24 @@
       "prompt": "What is a caravan in the game world?",
       "anchorSlugs": ["caravan"],
       "tags": ["factual", "glossary"]
+    },
+    {
+      "id": "wagon-upkeep",
+      "prompt": "How much gold does each wagon cost in upkeep per day?",
+      "anchorSlugs": ["economy-system"],
+      "tags": ["factual", "game-design"]
+    },
+    {
+      "id": "canary-share",
+      "prompt": "What share of players gets a new release first in the canary channel?",
+      "anchorSlugs": ["release-process"],
+      "tags": ["factual", "technical"]
+    },
+    {
+      "id": "hotfix-approval",
+      "prompt": "Who approves a hotfix and how quickly should it ship?",
+      "anchorSlugs": ["release-process"],
+      "tags": ["factual", "technical"]
     }
   ]
 }

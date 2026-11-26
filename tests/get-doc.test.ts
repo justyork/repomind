@@ -90,6 +90,25 @@ Body text.`,
       expect(result.total_chars).toBe(long.length);
     });
 
+    it('auto-truncates long pages to a preview and hints at sections', () => {
+      const big = ['# Big', 'x'.repeat(4000), '## Part', 'y'.repeat(100)].join('\n');
+      fs.writeFileSync(path.join(repo, 'docs/adr/big.md'), `---\ntype: adr\nslug: big\nstatus: accepted\ntitle: Big\n---\n${big}`, 'utf8');
+      const result = getDoc(new DocIndex(repo), 'big', { outline: true, autoTruncateAbove: 3000, previewChars: 500 });
+      expect(result.body).toHaveLength(500);
+      expect(result.truncated).toBe(true);
+      expect(result.total_chars).toBe(big.length);
+      expect(result.hint).toMatch(/section/);
+      expect(result.outline?.map((h) => h.heading)).toEqual(['Big', 'Part']);
+    });
+
+    it('does not auto-truncate when a section is requested', () => {
+      const big = ['# Big', 'x'.repeat(4000), '## Part', 'y'.repeat(100)].join('\n');
+      fs.writeFileSync(path.join(repo, 'docs/adr/big.md'), `---\ntype: adr\nslug: big\nstatus: accepted\ntitle: Big\n---\n${big}`, 'utf8');
+      const result = getDoc(new DocIndex(repo), 'big', { section: 'Part', autoTruncateAbove: 3000, previewChars: 500 });
+      expect(result.body).toBe('## Part\n' + 'y'.repeat(100));
+      expect(result.truncated).toBeUndefined();
+    });
+
     it('includes backlinks', () => {
       fs.writeFileSync(
         path.join(repo, 'docs/adr/other.md'),

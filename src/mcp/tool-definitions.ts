@@ -1,4 +1,4 @@
-import { DOC_DOMAINS, DOC_STATUSES, DOC_TYPES } from '../index/types.js';
+import { DOC_TYPES } from '../index/types.js';
 import { MAX_SEARCH_LIMIT, MCP_DEFAULT_SEARCH_LIMIT } from '../tools/search-docs.js';
 
 export const TOOL_NAMES = [
@@ -41,14 +41,15 @@ export function buildToolDefinitions(options: { writeEnabled: boolean }): McpToo
     {
       name: 'search_docs',
       description:
-        'Search docs by keywords or a question. Tries all terms, then any term (matchMode:any). Then call get_doc.',
+        'Search docs by keywords or a question. Tries all terms, then any term (matchMode:any). Hits name the best section; include_top returns its text. Then get_doc.',
       inputSchema: {
         type: 'object',
         properties: {
           query: { type: 'string', },
-          type: { type: 'string', enum: [...DOC_TYPES] },
-          domain: { type: 'string', enum: [...DOC_DOMAINS] },
-          status: { type: 'string', enum: [...DOC_STATUSES] },
+          type: { type: 'string' },
+          domain: { type: 'string' },
+          status: { type: 'string' },
+          include_top: { type: 'boolean', description: 'Attach best-section text to the first hit.' },
           limit: {
             type: 'number',
             description: `Max hits (default ${MCP_DEFAULT_SEARCH_LIMIT}, max ${MAX_SEARCH_LIMIT}).`,
@@ -61,13 +62,14 @@ export function buildToolDefinitions(options: { writeEnabled: boolean }): McpToo
     {
       name: 'get_doc',
       description:
-        'Get a page by slug: frontmatter, body, outline, backlinks. Long page: pass section (heading) or max_chars.',
+        'Get a page by slug: frontmatter, body, outline, backlinks. Long pages are previewed: pass section (heading), max_chars or full.',
       inputSchema: {
         type: 'object',
         properties: {
           slug: { type: 'string' },
           section: { type: 'string', description: 'Return only this heading and its subsections.' },
           max_chars: { type: 'number', description: 'Truncate the body to this many characters.' },
+          full: { type: 'boolean', description: 'Disable the long-page preview.' },
         },
         required: ['slug'],
       },
@@ -105,10 +107,10 @@ export function buildToolDefinitions(options: { writeEnabled: boolean }): McpToo
       inputSchema: {
         type: 'object',
         properties: {
-          type: { type: 'string', enum: [...DOC_TYPES] },
-          status: { type: 'string', enum: [...DOC_STATUSES] },
+          type: { type: 'string' },
+          status: { type: 'string' },
           tag: { type: 'string' },
-          domain: { type: 'string', enum: [...DOC_DOMAINS] },
+          domain: { type: 'string' },
         },
       },
       annotations: { title: 'List docs', ...READ_ONLY },

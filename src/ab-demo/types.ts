@@ -34,6 +34,8 @@ export interface ArmRepomindResult {
   docsFetched: number;
   /** True when at least one anchor slug was among the fetched docs. */
   anchorFound: boolean;
+  /** search_docs + get_doc calls the simulated agent made. */
+  toolCalls: number;
 }
 
 export interface AbQuestionComparison {

@@ -104,14 +104,14 @@ REPOMIND_UI_PASSWORD=your-password
 
 ## MCP tools
 
-- `search_docs` — keywords or a natural-language question; tries all terms, then relaxes to any term (`matchMode: "any"`). Filters: `type`, `domain`, `status`, `limit` (default 5). Hits include type/status/domain so superseded pages are visible.
-- `get_doc` — one page by slug: frontmatter, body, heading `outline`, `backlinks`. Long pages: `section` (heading text) or `max_chars`. Unknown slug returns `suggestions`.
+- `search_docs` — keywords or a natural-language question, ranked with BM25 (title/tag boosts, superseded pages down-ranked, pages other docs point to up-ranked). Hits show type/status/domain and the best-matching `section`; `include_top: true` returns that section's text inline, so many questions need a single call. Filters: `type`, `domain`, `status`, `limit` (default 5).
+- `get_doc` — one page by slug: frontmatter, body, heading `outline`, `backlinks`. Pages over ~3000 chars are previewed; pass `section` (heading text), `max_chars` or `full: true`. Unknown slug returns `suggestions`.
 - `explore_graph` — walk links from a page. `depth` = hops (default 2), `direction` = `out` | `in` | `both`.
 - `get_glossary_term` — resolve glossary entries
 - `list_docs` — browse every page (prefer `search_docs` on large repos)
 - `create_draft` — SQLite draft for human review; only listed when agent write is enabled (kill-switch pass or `REPOMIND_AGENT_WRITE=1`)
 
-Read tools carry `readOnlyHint`, and the server ships usage `instructions`. Errors are structured (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, …).
+Pages are also exposed as MCP resources: `repomind://doc/{slug}`. Read tools carry `readOnlyHint`, and the server ships usage `instructions`. Errors are structured (`NO_KNOWLEDGE_ROOT`, `BAD_ARGUMENT`, …).
 
 The server finds `docs/` by walking up from its working directory. Pin it explicitly with `repo-mind mcp --cwd <dir>` or `REPOMIND_ROOT=<dir>` when your MCP client does not start it inside the project.
 

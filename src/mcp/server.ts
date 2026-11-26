@@ -2,7 +2,10 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import {
   CallToolRequestSchema,
+  ListResourceTemplatesRequestSchema,
+  ListResourcesRequestSchema,
   ListToolsRequestSchema,
+  ReadResourceRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { getAgentWriteGate } from '../agent-write-gate.js';
 import { DocIndex } from '../index/doc-index.js';
@@ -10,7 +13,7 @@ import { DOC_DOMAINS, DOC_STATUSES, DOC_TYPES } from '../index/types.js';
 import { getPackageVersion } from '../package-version.js';
 import { createDraft } from '../tools/create-draft.js';
 import { exploreGraph, type GraphDirection } from '../tools/explore-graph.js';
-import { MCP_GET_DOC_OPTIONS, getDoc } from '../tools/get-doc.js';
+import { MCP_GET_DOC_OPTIONS, getDoc, toMcpDoc } from '../tools/get-doc.js';
 import { getGlossaryTerm } from '../tools/get-glossary-term.js';
 import { listDocs } from '../tools/list-docs.js';
 import { MCP_DEFAULT_SEARCH_LIMIT, searchDocs, toMcpSearchHit } from '../tools/search-docs.js';
@@ -20,6 +23,8 @@ import {
   isToolName,
 } from './tool-definitions.js';
 
+const DOC_URI_PREFIX = 'repomind://doc/';
+const DOC_URI_TEMPLATE = `${DOC_URI_PREFIX}{slug}`;
 const GRAPH_DIRECTIONS = ['out', 'in', 'both'] as const;
 
 interface ToolFailure {
@@ -129,16 +134,20 @@ function callTool(index: DocIndex, cwd: string, name: string, args: Record<strin
           status: status.ok ? status.value : undefined,
           domain: domain.ok ? domain.value : undefined,
           limit: num(args, 'limit') ?? MCP_DEFAULT_SEARCH_LIMIT,
+          includeTop: args.include_top === true,
         }).map(toMcpSearchHit),
       );
     }
     case 'get_doc':
       return toolResult(
-        getDoc(index, str(args, 'slug'), {
-          ...MCP_GET_DOC_OPTIONS,
-          section: typeof args.section === 'string' && args.section ? args.section : undefined,
-          maxChars: num(args, 'max_chars'),
-        }),
+        toMcpDoc(
+          getDoc(index, str(args, 'slug'), {
+            ...MCP_GET_DOC_OPTIONS,
+            ...(args.full === true ? { autoTruncateAbove: undefined } : {}),
+            section: typeof args.section === 'string' && args.section ? args.section : undefined,
+            maxChars: num(args, 'max_chars'),
+          }),
+        ),
       );
     case 'get_glossary_term':
       return toolResult(getGlossaryTerm(index, str(args, 'name')));
@@ -176,12 +185,38 @@ function callTool(index: DocIndex, cwd: string, name: string, args: Record<strin
 export function createMcpServer(index: DocIndex, cwd: string = process.cwd()): Server {
   const server = new Server(
     { name: 'repo-mind', version: getPackageVersion() },
-    { capabilities: { tools: {} }, instructions: SERVER_INSTRUCTIONS },
+    { capabilities: { tools: {}, resources: {} }, instructions: SERVER_INSTRUCTIONS },
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: buildToolDefinitions({ writeEnabled: getAgentWriteGate(cwd).enabled }),
   }));
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [] }));
+
+  server.setRequestHandler(ListResourceTemplatesRequestSchema, async () => ({
+    resourceTemplates: [
+      {
+        uriTemplate: DOC_URI_TEMPLATE,
+        name: 'doc',
+        description: 'A knowledge base page by slug (markdown body).',
+        mimeType: 'text/markdown',
+      },
+    ],
+  }));
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const uri = request.params.uri;
+    const slug = uri.startsWith(DOC_URI_PREFIX) ? decodeURIComponent(uri.slice(DOC_URI_PREFIX.length)) : '';
+    if (!index.getKnowledgeRoot()) {
+      index.rediscover();
+    }
+    const doc = getDoc(index, slug);
+    if (!doc.found || doc.body === undefined) {
+      throw new Error(`Resource not found: ${uri}`);
+    }
+    return { contents: [{ uri, mimeType: 'text/markdown', text: doc.body }] };
+  });
 
   server.setRequestHandler(CallToolRequestSchema, async (request) =>
     callTool(index, cwd, request.params.name, (request.params.arguments ?? {}) as Record<string, unknown>),

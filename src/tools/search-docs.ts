@@ -1,17 +1,34 @@
 import type { DocIndex } from '../index/doc-index.js';
 import type { DocDomain, DocRecord, DocStatus, DocType } from '../index/types.js';
 import {
+  extractSection,
+  kebab,
+  parseHeadings,
+  splitFlatSections,
+} from '../search/sections.js';
+import {
   TERM_PATTERN,
   extractAskSearchTerms,
   stemPrefix,
   tokenizeWords,
-  wordsMatchTerm,
 } from '../search/terms.js';
 
 export const DEFAULT_SEARCH_LIMIT = 20;
 export const MAX_SEARCH_LIMIT = 50;
 /** Default `limit` advertised by the MCP search_docs tool (agents rarely need more). */
 export const MCP_DEFAULT_SEARCH_LIMIT = 5;
+export const DEFAULT_TOP_CHARS = 1200;
+
+const BM25_K1 = 1.2;
+const BM25_B = 0.75;
+const TITLE_WEIGHT = 3;
+const TAG_WEIGHT = 3;
+const STATUS_MULTIPLIER: Record<DocStatus, number> = {
+  accepted: 1,
+  proposed: 0.95,
+  draft: 0.85,
+  superseded: 0.6,
+};
 
 export interface SearchDocsInput {
   query: string;
@@ -19,6 +36,9 @@ export interface SearchDocsInput {
   domain?: DocDomain;
   status?: DocStatus;
   limit?: number;
+  /** Attach the best-matching section text to the top hit. */
+  includeTop?: boolean;
+  topChars?: number;
 }
 
 export interface SearchDocsResult {
@@ -31,69 +51,110 @@ export interface SearchDocsResult {
   status?: DocStatus;
   relativePath?: string;
   updated?: string;
+  /** Heading of the best-matching section (omitted for intro text or headingless pages). */
+  section?: string;
+  /** Best section text, only on the first hit and only when includeTop is set. */
+  top?: { section?: string; text: string };
   /** `all`: every query term matched; `any`: relaxed fallback (some terms matched). */
   matchMode?: 'all' | 'any';
 }
 
-interface DocWords {
+interface WordStats {
+  length: number;
+  counts: Map<string, number>;
+}
+
+interface IndexedDoc {
   doc: DocRecord;
-  title: string[];
-  tags: string[];
-  body: string[];
+  title: WordStats;
+  tags: WordStats;
+  body: WordStats;
 }
 
-function toDocWords(doc: DocRecord): DocWords {
-  return {
+// Records are replaced when a file changes (mtime cache in DocIndex), so this stays fresh.
+const indexedCache = new WeakMap<DocRecord, IndexedDoc>();
+
+function statsOf(words: string[]): WordStats {
+  const counts = new Map<string, number>();
+  for (const word of words) {
+    counts.set(word, (counts.get(word) ?? 0) + 1);
+  }
+  return { length: words.length, counts };
+}
+
+function indexDoc(doc: DocRecord): IndexedDoc {
+  const cached = indexedCache.get(doc);
+  if (cached) return cached;
+  const indexed: IndexedDoc = {
     doc,
-    title: tokenizeWords(doc.title),
-    tags: doc.tags.flatMap((tag) => tokenizeWords(tag)),
-    body: tokenizeWords(doc.body),
+    title: statsOf(tokenizeWords(doc.title)),
+    tags: statsOf(doc.tags.flatMap((tag) => tokenizeWords(tag))),
+    body: statsOf(tokenizeWords(doc.body)),
   };
+  indexedCache.set(doc, indexed);
+  return indexed;
 }
 
-/** Returns the score for one term, or 0 when the term does not match. */
-function termScore(words: DocWords, term: string): number {
-  let score = 0;
-  if (wordsMatchTerm(words.tags, term)) score = Math.max(score, 3);
-  if (wordsMatchTerm(words.title, term)) score = Math.max(score, 2);
-  if (wordsMatchTerm(words.body, term)) score = Math.max(score, 1);
-  return score;
-}
-
-function scoreAll(words: DocWords, terms: string[]): number | null {
+function countPrefix(stats: WordStats, stem: string): number {
   let total = 0;
-  for (const term of terms) {
-    const score = termScore(words, term);
-    if (score === 0) return null;
-    total += score;
+  for (const [word, count] of stats.counts) {
+    if (word.startsWith(stem)) total += count;
   }
   return total;
 }
 
-function scoreAny(words: DocWords, terms: string[]): number | null {
-  let total = 0;
-  let matches = 0;
-  for (const term of terms) {
-    const score = termScore(words, term);
-    if (score > 0) {
-      matches += 1;
-      total += score;
-    }
-  }
-  return matches === 0 ? null : total + matches;
+function weightedTf(indexed: IndexedDoc, stem: string): number {
+  return (
+    TAG_WEIGHT * countPrefix(indexed.tags, stem) +
+    TITLE_WEIGHT * countPrefix(indexed.title, stem) +
+    countPrefix(indexed.body, stem)
+  );
 }
 
-function makeSnippet(body: string, terms: string[]): string {
+interface Scored {
+  indexed: IndexedDoc;
+  score: number;
+  matched: number;
+}
+
+/**
+ * Single-pass BM25F-style scoring. Docs matching more of the query rank higher via a mild
+ * coverage factor, but a missing filler word never removes a precise page from the results.
+ */
+function scoreCandidates(
+  candidates: IndexedDoc[],
+  terms: string[],
+  boosts: (doc: DocRecord) => number,
+): Scored[] {
+  if (candidates.length === 0) return [];
   const stems = terms.map(stemPrefix);
-  for (const match of body.toLowerCase().matchAll(TERM_PATTERN)) {
-    if (stems.some((stem) => match[0].startsWith(stem))) {
-      const index = match.index ?? 0;
-      const start = Math.max(0, index - 40);
-      const end = Math.min(body.length, index + match[0].length + 40);
-      return body.slice(start, end).replace(/\s+/g, ' ').trim();
-    }
-  }
-  return body.slice(0, 120).replace(/\s+/g, ' ').trim();
+  const tfs = candidates.map((indexed) => stems.map((stem) => weightedTf(indexed, stem)));
+  const n = candidates.length;
+  const idf = stems.map((_, t) => {
+    const df = tfs.reduce((sum, row) => sum + (row[t]! > 0 ? 1 : 0), 0);
+    return Math.log(1 + (n - df + 0.5) / (df + 0.5));
+  });
+  const avgLength = Math.max(
+    1,
+    candidates.reduce((sum, c) => sum + c.body.length + c.title.length, 0) / n,
+  );
+
+  const scored: Scored[] = [];
+  candidates.forEach((indexed, i) => {
+    const row = tfs[i]!;
+    const matched = row.filter((tf) => tf > 0).length;
+    if (matched === 0) return;
+    const length = indexed.body.length + indexed.title.length;
+    const norm = BM25_K1 * (1 - BM25_B + (BM25_B * length) / avgLength);
+    let score = 0;
+    row.forEach((tf, t) => {
+      if (tf > 0) score += idf[t]! * ((tf * (BM25_K1 + 1)) / (tf + norm));
+    });
+    score *= 0.5 + (0.5 * matched) / terms.length;
+    score *= boosts(indexed.doc);
+    scored.push({ indexed, score, matched });
+  });
+  return scored;
 }
 
 function clampLimit(limit: number | undefined): number {
@@ -101,44 +162,44 @@ function clampLimit(limit: number | undefined): number {
   return Math.min(MAX_SEARCH_LIMIT, Math.max(1, Math.floor(limit)));
 }
 
-function collect(
-  candidates: DocWords[],
-  terms: string[],
-  mode: 'all' | 'any',
-): SearchDocsResult[] {
-  const results: SearchDocsResult[] = [];
-  for (const words of candidates) {
-    const score = mode === 'all' ? scoreAll(words, terms) : scoreAny(words, terms);
-    if (score === null) continue;
-    const { doc } = words;
-    results.push({
-      slug: doc.slug,
-      title: doc.title,
-      snippet: makeSnippet(doc.body, terms),
-      score,
-      type: doc.type,
-      domain: doc.domain,
-      status: doc.status,
-      relativePath: doc.relativePath,
-      ...(doc.frontmatter.updated ? { updated: doc.frontmatter.updated } : {}),
-      matchMode: mode,
-    });
+function snippetFrom(text: string, terms: string[]): string {
+  const stems = terms.map(stemPrefix);
+  for (const match of text.toLowerCase().matchAll(TERM_PATTERN)) {
+    if (stems.some((stem) => match[0].startsWith(stem))) {
+      const index = match.index ?? 0;
+      const start = Math.max(0, index - 40);
+      const end = Math.min(text.length, index + match[0].length + 40);
+      return text.slice(start, end).replace(/\s+/g, ' ').trim();
+    }
   }
-  return results;
+  return text.slice(0, 120).replace(/\s+/g, ' ').trim();
 }
 
-/** Compact hit shape returned over MCP (drops score/path; matchMode only when relaxed). */
-export function toMcpSearchHit(hit: SearchDocsResult): Record<string, unknown> {
-  return {
-    slug: hit.slug,
-    title: hit.title,
-    type: hit.type,
-    status: hit.status,
-    domain: hit.domain,
-    ...(hit.updated ? { updated: hit.updated } : {}),
-    snippet: hit.snippet,
-    ...(hit.matchMode === 'any' ? { matchMode: 'any' } : {}),
-  };
+interface SectionPick {
+  heading: string | null;
+  text: string;
+}
+
+/** Picks the flat section whose words match the most query terms (earliest wins ties). */
+function pickBestSection(doc: DocRecord, terms: string[]): SectionPick | null {
+  if (doc.contentKind !== 'markdown') return null;
+  const headings = parseHeadings(doc.body);
+  if (headings.length === 0) return null;
+  const stems = terms.map(stemPrefix);
+  let best: SectionPick | null = null;
+  let bestScore = -1;
+  for (const section of splitFlatSections(doc.body, headings)) {
+    const words = tokenizeWords(`${section.heading ?? ''} ${section.text}`);
+    let score = 0;
+    for (const stem of stems) {
+      if (words.some((word) => word.startsWith(stem))) score += 1;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = section;
+    }
+  }
+  return bestScore > 0 ? best : null;
 }
 
 export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsResult[] {
@@ -151,31 +212,84 @@ export function searchDocs(index: DocIndex, input: SearchDocsInput): SearchDocsR
     return [];
   }
 
-  let docs = index.refresh();
+  const allDocs = index.refresh();
+  let docs = allDocs;
   if (input.type) docs = docs.filter((doc) => doc.type === input.type);
   if (input.domain) docs = docs.filter((doc) => doc.domain === input.domain);
   if (input.status) docs = docs.filter((doc) => doc.status === input.status);
 
-  const candidates = docs.map(toDocWords);
+  const inbound = new Map<string, number>();
+  for (const doc of allDocs) {
+    for (const target of new Set(doc.related)) {
+      if (target !== doc.slug) inbound.set(target, (inbound.get(target) ?? 0) + 1);
+    }
+  }
+  const queryKebab = kebab(input.query);
+  const queryStems = terms.map(stemPrefix);
+  const queryNamesTitle = (title: string): boolean => {
+    const words = tokenizeWords(title);
+    return words.length > 0 && words.every((word) => queryStems.some((stem) => word.startsWith(stem)));
+  };
+  const queryLower = input.query.trim().toLowerCase();
+  const boosts = (doc: DocRecord): number => {
+    let multiplier = STATUS_MULTIPLIER[doc.status];
+    multiplier *= 1 + 0.1 * Math.min(inbound.get(doc.slug) ?? 0, 5);
+    if (doc.slug === queryKebab || doc.title.toLowerCase() === queryLower) {
+      multiplier *= 2;
+    } else if (queryNamesTitle(doc.title)) {
+      // The query mentions every word of the page title: the page is probably the subject.
+      multiplier *= 2;
+    }
+    return multiplier;
+  };
+
+  const candidates = docs.map(indexDoc);
   const meaningful = extractAskSearchTerms(input.query);
-  const relaxedTerms = meaningful.length > 0 ? meaningful : terms;
+  const usedTerms = meaningful.length > 0 ? meaningful : terms;
+  const scored = scoreCandidates(candidates, usedTerms, boosts);
 
-  // Strict AND -> stop words dropped -> any-term fallback.
-  const attempts: Array<{ terms: string[]; mode: 'all' | 'any' }> = [{ terms, mode: 'all' }];
-  if (relaxedTerms.length < terms.length) {
-    attempts.push({ terms: relaxedTerms, mode: 'all' });
-  }
-  if (relaxedTerms.length > 1) {
-    attempts.push({ terms: relaxedTerms, mode: 'any' });
-  }
+  scored.sort((a, b) => b.score - a.score || a.indexed.doc.slug.localeCompare(b.indexed.doc.slug));
 
-  let results: SearchDocsResult[] = [];
-  for (const attempt of attempts) {
-    results = collect(candidates, attempt.terms, attempt.mode);
-    if (results.length > 0) break;
-  }
+  const topChars = input.topChars ?? DEFAULT_TOP_CHARS;
+  return scored.slice(0, clampLimit(input.limit)).map(({ indexed, score, matched }, rank) => {
+    const { doc } = indexed;
+    const pick = pickBestSection(doc, usedTerms);
+    const section = pick?.heading ?? undefined;
+    const result: SearchDocsResult = {
+      slug: doc.slug,
+      title: doc.title,
+      snippet: snippetFrom(pick?.text || doc.body, usedTerms),
+      score: Math.round(score * 100) / 100,
+      type: doc.type,
+      domain: doc.domain,
+      status: doc.status,
+      relativePath: doc.relativePath,
+      ...(doc.frontmatter.updated ? { updated: doc.frontmatter.updated } : {}),
+      ...(section ? { section } : {}),
+      matchMode: matched === usedTerms.length ? 'all' : 'any',
+    };
+    if (input.includeTop && rank === 0) {
+      const full = section
+        ? extractSection(doc.body, parseHeadings(doc.body), section)?.text ?? pick?.text ?? doc.body
+        : doc.body;
+      result.top = { ...(section ? { section } : {}), text: full.slice(0, topChars) };
+    }
+    return result;
+  });
+}
 
-  return results
-    .sort((a, b) => b.score - a.score || a.slug.localeCompare(b.slug))
-    .slice(0, clampLimit(input.limit));
+/** Compact hit shape returned over MCP (drops score/path; matchMode only when relaxed). */
+export function toMcpSearchHit(hit: SearchDocsResult): Record<string, unknown> {
+  return {
+    slug: hit.slug,
+    title: hit.title,
+    type: hit.type,
+    status: hit.status,
+    domain: hit.domain,
+    ...(hit.updated ? { updated: hit.updated } : {}),
+    ...(hit.section ? { section: hit.section } : {}),
+    snippet: hit.snippet,
+    ...(hit.matchMode === 'any' ? { matchMode: 'any' } : {}),
+    ...(hit.top ? { top: hit.top } : {}),
+  };
 }

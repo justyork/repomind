@@ -30,6 +30,84 @@ afterEach(() => {
   }
 });
 
+function writeRaw(root: string, rel: string, front: string, body: string): void {
+  const filePath = path.join(root, 'docs', rel);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `---\n${front}\n---\n\n${body}`, 'utf8');
+}
+
+describe('search_docs ranking and sections', () => {
+  let repo: string;
+
+  beforeEach(() => {
+    repo = makeTempDir();
+  });
+
+  it('ranks superseded pages below accepted ones with the same content', () => {
+    writeRaw(repo, 'adr/old.md', 'type: adr\nslug: old\nstatus: superseded\ntitle: Queue design', 'queue retry policy');
+    writeRaw(repo, 'adr/new.md', 'type: adr\nslug: new\nstatus: accepted\ntitle: Queue design', 'queue retry policy');
+    const results = searchDocs(new DocIndex(repo), { query: 'queue retry' });
+    expect(results.map((r) => r.slug)).toEqual(['new', 'old']);
+  });
+
+  it('prefers an exact slug match over repeated body mentions', () => {
+    writeRaw(repo, 'wiki/cache.md', 'type: wiki-page\nslug: cache\nstatus: accepted\ntitle: Cache', 'short');
+    writeRaw(repo, 'wiki/other.md', 'type: wiki-page\nslug: other\nstatus: accepted\ntitle: Other', 'cache cache cache cache cache');
+    expect(searchDocs(new DocIndex(repo), { query: 'cache' })[0]?.slug).toBe('cache');
+  });
+
+  it('boosts pages that other pages point to via related', () => {
+    writeRaw(repo, 'wiki/a.md', 'type: wiki-page\nslug: a\nstatus: accepted\ntitle: Alpha', 'deploy pipeline notes');
+    writeRaw(repo, 'wiki/b.md', 'type: wiki-page\nslug: b\nstatus: accepted\ntitle: Beta', 'deploy pipeline notes');
+    writeRaw(repo, 'wiki/c.md', 'type: wiki-page\nslug: c\nstatus: accepted\ntitle: Gamma\nrelated:\n  - b', 'unrelated');
+    expect(searchDocs(new DocIndex(repo), { query: 'deploy pipeline' })[0]?.slug).toBe('b');
+  });
+
+  it('keeps a precise short page when filler query words are missing from it', () => {
+    writeRaw(repo, 'glossary/caravan.md', 'type: glossary-term\nslug: caravan\nstatus: accepted\ntitle: Caravan', 'A merchant convoy between towns.');
+    writeRaw(
+      repo,
+      'specs/economy.md',
+      'type: feature-spec\nslug: economy\nstatus: accepted\ntitle: Economy System',
+      'In the game world the caravan pays upkeep. ' + 'Trade prices move weekly across the game world. '.repeat(40),
+    );
+    // In a real game repo "game" and "world" are common words, not discriminating ones.
+    for (let i = 0; i < 6; i += 1) {
+      writeRaw(repo, `wiki/filler-${i}.md`, `type: wiki-page\nslug: filler-${i}\nstatus: accepted\ntitle: Filler ${i}`, 'Notes about the game world and its design.');
+    }
+    const hits = searchDocs(new DocIndex(repo), { query: 'What is a caravan in the game world?' });
+    expect(hits[0]?.slug).toBe('caravan');
+  });
+
+  it('weights rare terms above common ones', () => {
+    writeRaw(repo, 'wiki/common.md', 'type: wiki-page\nslug: common\nstatus: accepted\ntitle: One', 'the system the system the system overview');
+    writeRaw(repo, 'wiki/rare.md', 'type: wiki-page\nslug: rare\nstatus: accepted\ntitle: Two', 'overview of zeppelin');
+    writeRaw(repo, 'wiki/filler.md', 'type: wiki-page\nslug: filler\nstatus: accepted\ntitle: Three', 'system overview system');
+    const hits = searchDocs(new DocIndex(repo), { query: 'zeppelin system' });
+    expect(hits[0]?.slug).toBe('rare');
+  });
+
+  const sectioned = ['# Guide', 'intro text', '## Install', 'run the installer', '## Billing', 'invoices are monthly and prorated', '### Refunds', 'refunds take five days'].join('\n');
+
+  it('reports the best-matching section and snippets from it', () => {
+    writeRaw(repo, 'wiki/guide.md', 'type: wiki-page\nslug: guide\nstatus: accepted\ntitle: Guide', sectioned);
+    const [hit] = searchDocs(new DocIndex(repo), { query: 'invoices prorated' });
+    expect(hit?.section).toBe('Billing');
+    expect(hit?.snippet).toContain('invoices');
+  });
+
+  it('includes the top section text when includeTop is set, capped by topChars', () => {
+    writeRaw(repo, 'wiki/guide.md', 'type: wiki-page\nslug: guide\nstatus: accepted\ntitle: Guide', sectioned);
+    const idx = new DocIndex(repo);
+    const [hit, ...rest] = searchDocs(idx, { query: 'invoices', includeTop: true });
+    expect(hit?.top?.text).toContain('invoices are monthly');
+    expect(hit?.top?.text).toContain('Refunds');
+    expect(rest.every((r) => r.top === undefined)).toBe(true);
+    const [short] = searchDocs(idx, { query: 'invoices', includeTop: true, topChars: 20 });
+    expect(short?.top?.text.length).toBeLessThanOrEqual(20);
+  });
+});
+
 describe('search_docs', () => {
   let repo: string;
   let index: DocIndex;

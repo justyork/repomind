@@ -131,8 +131,8 @@ Flags:
 | Tool | Input | Output highlights |
 |------|-------|-------------------|
 | `list_docs` | optional type, status, tag filters | slug list |
-| `search_docs` | query (keywords or question), type/domain/status, limit | ranked hits with type/status/domain |
-| `get_doc` | slug, section, max_chars | frontmatter + body + outline + backlinks |
+| `search_docs` | query (keywords or question), type/domain/status, limit, include_top | BM25-ranked hits with type/status/domain, best `section`, optional section text |
+| `get_doc` | slug, section, max_chars, full | frontmatter + body (long pages previewed) + outline + backlinks |
 | `get_glossary_term` | name | definition + related |
 | `explore_graph` | slug, depth (hops), direction out/in/both | nodes, edges, broken_links |
 

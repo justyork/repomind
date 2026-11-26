@@ -4,8 +4,17 @@ import path from 'node:path';
 
 const NPM_PACKAGE_NAME = '@justyork/repo-mind';
 const MCP_SERVER_NAME = 'repo-mind';
-const CLAUDE_SNIPPET =
-  '\n<!-- repo-mind -->\nProject knowledge lives in `docs/`. Use repo-mind MCP (`search_docs`, `get_doc`, `get_glossary_term`) — the same files humans edit in `repo-mind ui`.\n<!-- /repo-mind -->\n';
+const CLAUDE_SNIPPET = [
+  '',
+  '<!-- repo-mind -->',
+  'Project knowledge lives in `docs/`. Use repo-mind MCP, same files humans edit in `repo-mind ui`:',
+  '1. `search_docs` with a keyword or a full question; hits show status and best section.',
+  '2. `get_doc` on the best slug; for long pages pass `section` (see outline) instead of the whole page.',
+  '3. Treat `superseded`/`draft` pages as possibly outdated; prefer the accepted page.',
+  '4. `explore_graph` (direction in/out/both) for related decisions; `get_glossary_term` for domain terms.',
+  '<!-- /repo-mind -->',
+  '',
+].join('\n');
 
 export interface SetupOptions {
   cwd?: string;
@@ -22,7 +31,9 @@ export function runSetup(options: SetupOptions = {}): number {
 
   if (setupCursor) {
     const cursorPath = resolveCursorConfigPath(cwd);
-    mergeMcpConfig(cursorPath, options.force ?? false);
+    // A project-level config belongs to this project, so pin the server to it.
+    const projectLevel = cursorPath === path.join(cwd, '.cursor', 'mcp.json');
+    mergeMcpConfig(cursorPath, options.force ?? false, projectLevel ? cwd : undefined);
     actions.push(`Cursor MCP config: ${cursorPath}`);
   }
 
@@ -55,7 +66,7 @@ interface McpJson {
   mcpServers?: Record<string, { command: string; args?: string[] }>;
 }
 
-function mergeMcpConfig(configPath: string, force: boolean): void {
+function mergeMcpConfig(configPath: string, force: boolean, pinnedCwd?: string): void {
   const config = readJson<McpJson>(configPath);
   config.mcpServers ??= {};
 
@@ -66,7 +77,7 @@ function mergeMcpConfig(configPath: string, force: boolean): void {
 
   config.mcpServers[MCP_SERVER_NAME] = {
     command: 'npx',
-    args: ['-y', NPM_PACKAGE_NAME, 'mcp'],
+    args: ['-y', NPM_PACKAGE_NAME, 'mcp', ...(pinnedCwd ? ['--cwd', pinnedCwd] : [])],
   };
 
   writeJson(configPath, config);

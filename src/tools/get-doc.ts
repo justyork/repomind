@@ -2,13 +2,10 @@ import { isValidSlug } from '../index/slug.js';
 import type { DocIndex } from '../index/doc-index.js';
 import { getBacklinksForSlug } from '../index/link-index.js';
 import type { DocFrontmatter } from '../index/types.js';
-import { tokenizeWords } from '../search/terms.js';
+import { extractSection, kebab, parseHeadings, type DocHeading } from '../search/sections.js';
 import { buildLinkIndexForDocs } from './explore-graph.js';
 
-export interface DocHeading {
-  level: number;
-  heading: string;
-}
+export type { DocHeading };
 
 export interface GetDocOptions {
   /** Include the heading outline of the body. */
@@ -21,6 +18,9 @@ export interface GetDocOptions {
   backlinks?: boolean;
   /** On a miss, suggest similar slugs. */
   suggestions?: boolean;
+  /** Bodies longer than this are cut to `previewChars` unless a section/maxChars was requested. */
+  autoTruncateAbove?: number;
+  previewChars?: number;
 }
 
 /** Options the MCP get_doc tool always applies (cheap, agent-useful extras). */
@@ -28,6 +28,8 @@ export const MCP_GET_DOC_OPTIONS: GetDocOptions = {
   outline: true,
   backlinks: true,
   suggestions: true,
+  autoTruncateAbove: 3000,
+  previewChars: 1500,
 };
 
 export interface GetDocResult {
@@ -43,58 +45,9 @@ export interface GetDocResult {
   section_found?: boolean;
   truncated?: boolean;
   total_chars?: number;
+  hint?: string;
   backlinks?: Array<{ slug: string; title: string; kind: string }>;
   suggestions?: string[];
-}
-
-const HEADING_PATTERN = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-const FENCE_PATTERN = /^\s*(```|~~~)/;
-
-interface ParsedHeading extends DocHeading {
-  line: number;
-}
-
-function parseHeadings(body: string): ParsedHeading[] {
-  const headings: ParsedHeading[] = [];
-  let inFence = false;
-  body.split('\n').forEach((text, line) => {
-    if (FENCE_PATTERN.test(text)) {
-      inFence = !inFence;
-      return;
-    }
-    if (inFence) {
-      return;
-    }
-    const match = HEADING_PATTERN.exec(text);
-    if (match) {
-      headings.push({ level: match[1]!.length, heading: match[2]!.trim(), line });
-    }
-  });
-  return headings;
-}
-
-function kebab(text: string): string {
-  return tokenizeWords(text).join('-');
-}
-
-function extractSection(
-  body: string,
-  headings: ParsedHeading[],
-  wanted: string,
-): { heading: string; text: string } | null {
-  const needle = wanted.trim().toLowerCase();
-  const needleKebab = kebab(wanted);
-  const index = headings.findIndex(
-    (h) => h.heading.toLowerCase() === needle || kebab(h.heading) === needleKebab,
-  );
-  if (index < 0) {
-    return null;
-  }
-  const start = headings[index]!;
-  const next = headings.slice(index + 1).find((h) => h.level <= start.level);
-  const lines = body.split('\n');
-  const text = lines.slice(start.line, next ? next.line : lines.length).join('\n').trim();
-  return { heading: start.heading, text };
 }
 
 function editDistance(a: string, b: string): number {
@@ -181,6 +134,20 @@ export function getDoc(index: DocIndex, slug: string, options: GetDocOptions = {
     }
   }
 
+  if (
+    result.body !== undefined &&
+    !options.section &&
+    options.maxChars === undefined &&
+    options.autoTruncateAbove !== undefined &&
+    result.body.length > options.autoTruncateAbove
+  ) {
+    const preview = options.previewChars ?? options.autoTruncateAbove;
+    result.total_chars = result.body.length;
+    result.body = result.body.slice(0, preview);
+    result.truncated = true;
+    result.hint = `Long page (${result.total_chars} chars): showing the first ${preview}. Pass section=<heading> (see outline) or full=true.`;
+  }
+
   if (options.backlinks) {
     const docsBySlug = new Map(index.refresh().map((record) => [record.slug, record]));
     const seenSlugs = new Set<string>();
@@ -196,4 +163,30 @@ export function getDoc(index: DocIndex, slug: string, options: GetDocOptions = {
   }
 
   return result;
+}
+
+/** Compact projection returned over MCP: no filesystem path, no duplicated slug, no empty arrays. */
+export function toMcpDoc(result: GetDocResult): Record<string, unknown> {
+  if (!result.found) {
+    return { found: false, ...(result.suggestions ? { suggestions: result.suggestions } : {}) };
+  }
+  const { slug: _slug, tags, related, ...frontmatter } = result.frontmatter ?? ({} as DocFrontmatter);
+  const projected: Record<string, unknown> = {
+    found: true,
+    slug: result.slug,
+    ...(result.contentKind && result.contentKind !== 'markdown' ? { contentKind: result.contentKind } : {}),
+    frontmatter: {
+      ...frontmatter,
+      ...(tags && tags.length > 0 ? { tags } : {}),
+      ...(related && related.length > 0 ? { related } : {}),
+    },
+    body: result.body,
+  };
+  for (const key of ['section', 'section_found', 'truncated', 'total_chars', 'hint', 'outline', 'backlinks'] as const) {
+    const value = result[key];
+    if (value === undefined) continue;
+    if (Array.isArray(value) && value.length === 0) continue;
+    projected[key] = value;
+  }
+  return projected;
 }

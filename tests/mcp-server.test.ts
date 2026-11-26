@@ -69,6 +69,56 @@ describe('mcp server', () => {
     expect(tools.map((t) => t.name)).toContain('create_draft');
   });
 
+  it('keeps tool schemas lean: no repeated enums on search filters', async () => {
+    const client = await connect(makeRepo(true));
+    const { tools } = await client.listTools();
+    const search = tools.find((t) => t.name === 'search_docs')!;
+    const props = search.inputSchema.properties as Record<string, Record<string, unknown>>;
+    expect(props.type).not.toHaveProperty('enum');
+    expect(props.status).not.toHaveProperty('enum');
+    expect(props).toHaveProperty('include_top');
+  });
+
+  it('omits internal path and duplicate slug from get_doc', async () => {
+    const client = await connect(makeRepo(true));
+    const data = parse(await client.callTool({ name: 'get_doc', arguments: { slug: 'choice' } }));
+    expect(data.path).toBeUndefined();
+    expect(data.frontmatter.slug).toBeUndefined();
+    expect(data.frontmatter.title).toBe('Choice');
+    expect(data.body).toContain('sqlite');
+  });
+
+  it('previews long pages and returns everything with full=true', async () => {
+    const repo = makeRepo(true);
+    fs.writeFileSync(
+      path.join(repo, 'docs/adr/long.md'),
+      '---\ntype: adr\nslug: long\nstatus: accepted\ntitle: Long\n---\n# Long\n' + 'z'.repeat(6000) + '\n## Tail\nend',
+      'utf8',
+    );
+    const client = await connect(repo);
+    const preview = parse(await client.callTool({ name: 'get_doc', arguments: { slug: 'long' } }));
+    expect(preview.truncated).toBe(true);
+    expect(preview.hint).toMatch(/section/);
+    expect(preview.outline.map((h: { heading: string }) => h.heading)).toEqual(['Long', 'Tail']);
+    const full = parse(await client.callTool({ name: 'get_doc', arguments: { slug: 'long', full: true } }));
+    expect(full.truncated).toBeUndefined();
+    expect(full.body).toContain('end');
+  });
+
+  it('search_docs include_top returns the best section text inline', async () => {
+    const client = await connect(makeRepo(true));
+    const hits = parse(await client.callTool({ name: 'search_docs', arguments: { query: 'sqlite', include_top: true } }));
+    expect(hits[0].top.text).toContain('sqlite');
+  });
+
+  it('exposes docs as repomind://doc/{slug} resources', async () => {
+    const client = await connect(makeRepo(true));
+    const templates = await client.listResourceTemplates();
+    expect(templates.resourceTemplates[0]?.uriTemplate).toBe('repomind://doc/{slug}');
+    const read = await client.readResource({ uri: 'repomind://doc/choice' });
+    expect((read.contents[0] as { text: string }).text).toContain('We chose sqlite.');
+  });
+
   it('answers search_docs end to end', async () => {
     const client = await connect(makeRepo(true));
     const data = parse(await client.callTool({ name: 'search_docs', arguments: { query: 'sqlite' } }));
