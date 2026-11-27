@@ -4,7 +4,7 @@
 
 ## Status
 
-**v0.6.1** — live A/B eval (`repo-mind ab-eval`) for kill-switch proof on real `docs/`. Also: `create_draft` MCP, `publish --pr` (0.6.0). Prior: WYSIWYG editor, keyboard nav, domain labels.
+**v0.10.0** — MCP usability: section-aware BM25 `search_docs`, `get_doc` sections/outline, directional `explore_graph`, MCP resources, optional local semantic search. Prior: Ask assistant, `.env` loader (0.9.0).
 
 | Artifact | Location |
 |----------|----------|

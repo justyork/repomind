@@ -4,6 +4,8 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-27
+
 ### Changed
 
 - **`search_docs`** — natural-language queries work: BM25-style ranking over title/tags/body with stop words dropped and a mild coverage factor (`matchMode: "any"` when some terms are missing); word-boundary matching with light RU/EN inflection; superseded/draft pages down-ranked, pages referenced via `related` and pages named by the query up-ranked; hits carry type/status/domain/updated and the best-matching `section`; `include_top` returns that section's text; new `status` and `limit` params (MCP default 5); per-doc token cache
