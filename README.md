@@ -121,7 +121,7 @@ The server finds `docs/` by walking up from its working directory. Pin it explic
 Lexical search cannot bridge languages or paraphrases: a Russian question will not find an English page that shares no words with it. RepoMind can blend BM25 with local embeddings. It is **off until the optional dependency is installed**, and nothing leaves your machine.
 
 ```bash
-npm i @huggingface/transformers        # optional dependency (downloads onnxruntime)
+npm i @huggingface/transformers        # optional peer dependency, NOT installed with repo-mind (downloads onnxruntime)
 npx @justyork/repo-mind embed          # builds the vector cache; first run downloads the model (~120 MB)
 ```
 

@@ -4,6 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-27
+
+### Fixed
+
+- **Semantic search is now truly opt-in** — `@huggingface/transformers` moved from `optionalDependencies` (which npm installs by default, pulling ~350 packages and starting a model download on first `mcp` run) to an optional peer dependency; plain installs stay on BM25
+
 ## [0.10.0] - 2026-11-27
 
 ### Changed
